@@ -29,7 +29,9 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white"><ShieldCheck className="w-5 h-5" /></div>
-            <h1 className="font-bold text-slate-900 leading-none">LeaveCore</h1>
+            <h1 className="font-bold text-slate-900 leading-none">LEAVE MANAGMENT SYSTEM
+              
+            </h1>
           </div>
           <div className="flex gap-2 bg-slate-100 p-1 rounded-xl border">
             <button onClick={() => setView('hr')} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold ${view === 'hr' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600'}`}><Users className="w-4 h-4"/> HR View</button>
