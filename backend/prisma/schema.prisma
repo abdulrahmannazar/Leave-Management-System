@@ -8,16 +8,15 @@ datasource db {
 }
 
 model Employee {
-  id              String   @id
-  name            String
-  dept            String
-  allowedAnnual   Float
-  remainingAnnual Float
-  allowedCasual   Float
-  remainingCasual Float
-  allowedShort    Float    @default(2)
-  remainingShort  Float    @default(2)
-  attendanceDate  String
-  presentToday    Boolean  @default(false)
-  presentTime     String?
+  id               String   @id
+  name             String
+  dept             String
+  allowedAnnual    Float
+  remainingAnnual  Float
+  allowedCasual    Float
+  remainingCasual  Float
+  shortLeavesTaken Float    @default(0)
+  attendanceDate   String
+  presentToday     Boolean  @default(false)
+  presentTime      String?
 }
