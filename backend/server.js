@@ -6,15 +6,16 @@ const nodemailer = require('nodemailer');
 const app = express();
 const prisma = new PrismaClient();
 
-app.use(
-  cors({
-    origin: [
-      'https://leave-management-system-rust.vercel.app',
-      'http://localhost:5173', 
-    ],
-    credentials: true,
-  })
-);
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 app.use(express.json());
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
