@@ -12,7 +12,7 @@ app.use(express.json());
 const getTodayString = () => new Date().toISOString().split('T')[0];
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
 
-// Setup Mailer
+// Setup Mailer for Breach Notifications
 let transporter;
 nodemailer.createTestAccount().then((account) => {
   transporter = nodemailer.createTransport({
@@ -46,12 +46,11 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// 2. Add Employee (Allowed leaves set once)
+// 2. Add Employee (Allowed leaves locked at onboarding, shortLeavesTaken starts at 0)
 app.post('/api/employees', async (req, res) => {
-  const { name, dept, allowedAnnual, allowedCasual, allowedShort } = req.body;
+  const { name, dept, allowedAnnual, allowedCasual } = req.body;
   const annual = Math.max(0, roundToOneDecimal(parseFloat(allowedAnnual) || 0));
   const casual = Math.max(0, roundToOneDecimal(parseFloat(allowedCasual) || 0));
-  const shortL = Math.max(0, roundToOneDecimal(parseFloat(allowedShort) || 0));
 
   try {
     const count = await prisma.employee.count();
@@ -66,8 +65,7 @@ app.post('/api/employees', async (req, res) => {
         remainingAnnual: annual,
         allowedCasual: casual,
         remainingCasual: casual,
-        allowedShort: shortL,
-        remainingShort: shortL,
+        shortLeavesTaken: 0,
         attendanceDate: getTodayString()
       }
     });
@@ -77,15 +75,15 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-// 3. Update Remaining Leaves (HR direct manual edit)
+// 3. Update Remaining Leaves or Short Leaves Taken directly
 app.patch('/api/employees/:id/remaining', async (req, res) => {
   const { id } = req.params;
-  const { remainingAnnual, remainingCasual, remainingShort } = req.body;
+  const { remainingAnnual, remainingCasual, shortLeavesTaken } = req.body;
 
   const data = {};
   if (remainingAnnual !== undefined) data.remainingAnnual = roundToOneDecimal(parseFloat(remainingAnnual) || 0);
   if (remainingCasual !== undefined) data.remainingCasual = roundToOneDecimal(parseFloat(remainingCasual) || 0);
-  if (remainingShort !== undefined) data.remainingShort = roundToOneDecimal(parseFloat(remainingShort) || 0);
+  if (shortLeavesTaken !== undefined) data.shortLeavesTaken = Math.max(0, roundToOneDecimal(parseFloat(shortLeavesTaken) || 0));
 
   try {
     const updated = await prisma.employee.update({ where: { id }, data });
@@ -95,7 +93,24 @@ app.patch('/api/employees/:id/remaining', async (req, res) => {
   }
 });
 
-// 4. Mark Daily Attendance
+// 4. Quick Increment Short Leaves (+1 by HR)
+app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const emp = await prisma.employee.findUnique({ where: { id } });
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    const updated = await prisma.employee.update({
+      where: { id },
+      data: { shortLeavesTaken: roundToOneDecimal(emp.shortLeavesTaken + 1) }
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to increment short leave' });
+  }
+});
+
+// 5. Mark Daily Attendance
 app.post('/api/employees/:id/attendance', async (req, res) => {
   const { id } = req.params;
   try {
@@ -103,7 +118,7 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
     emp = await ensureDailyReset(emp);
-    if (emp.presentToday) return res.status(400).json({ error: 'Already marked present' });
+    if (emp.presentToday) return res.status(400).json({ error: 'Already marked present today' });
 
     const updated = await prisma.employee.update({
       where: { id },
@@ -118,30 +133,22 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
   }
 });
 
-// 5. Submit Leave Request & Dispatch Email / Popup Alert on Breach
+// 6. Submit Leave Request & Dispatch Alert on Limit Breach
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
-  const { type, days, reason } = req.body; // type: 'annual' | 'casual' | 'short'
+  const { type, days, reason } = req.body; // 'annual' | 'casual'
   const numDays = roundToOneDecimal(parseFloat(days));
 
   try {
     const emp = await prisma.employee.findUnique({ where: { id } });
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
-    let remainingField = 'remainingAnnual';
-    let leaveTypeName = 'Annual Leave';
-
-    if (type === 'casual') {
-      remainingField = 'remainingCasual';
-      leaveTypeName = 'Casual Leave';
-    } else if (type === 'short') {
-      remainingField = 'remainingShort';
-      leaveTypeName = 'Short Leave';
-    }
-
+    const isAnnual = type === 'annual';
+    const remainingField = isAnnual ? 'remainingAnnual' : 'remainingCasual';
+    const leaveTypeName = isAnnual ? 'Annual Leave' : 'Casual Leave';
     const currentRemaining = emp[remainingField];
 
-    // QUOTA BREACH SENTINEL
+    // QUOTA BREACH SENTINEL: Triggers Email & Popup Flag
     if (numDays > currentRemaining) {
       const exceededBy = roundToOneDecimal(numDays - currentRemaining);
 
@@ -157,7 +164,7 @@ Remaining Balance: ${currentRemaining}
 Exceeded By: ${exceededBy}
 Reason: ${reason || 'None provided'}
 
-An automated popup alert has been triggered on the management portal.`
+An automated popup alert has also been displayed on the portal.`
       };
 
       if (transporter) {
@@ -187,16 +194,14 @@ An automated popup alert has been triggered on the management portal.`
   }
 });
 
-// 6. Force Approve Exceeded Leave
+// 7. Force Approve Exceeded Leave
 app.post('/api/employees/:id/force-approve', async (req, res) => {
   const { id } = req.params;
   const { type, days } = req.body;
 
   try {
     const emp = await prisma.employee.findUnique({ where: { id } });
-    let remainingField = 'remainingAnnual';
-    if (type.toLowerCase().includes('casual')) remainingField = 'remainingCasual';
-    if (type.toLowerCase().includes('short')) remainingField = 'remainingShort';
+    const remainingField = type.toLowerCase().includes('annual') ? 'remainingAnnual' : 'remainingCasual';
 
     const updated = await prisma.employee.update({
       where: { id },
