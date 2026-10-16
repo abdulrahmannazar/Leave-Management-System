@@ -23,8 +23,17 @@ export const updateRemainingLeaves = async (id, payload) => {
   return res.json();
 };
 
+export const incrementShortLeave = async (id) => {
+  const res = await fetch(`${API_BASE}/employees/${id}/increment-short-leave`, {
+    method: 'POST'
+  });
+  return res.json();
+};
+
 export const markAttendance = async (id) => {
-  const res = await fetch(`${API_BASE}/employees/${id}/attendance`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/employees/${id}/attendance`, {
+    method: 'POST'
+  });
   return res.json();
 };
 

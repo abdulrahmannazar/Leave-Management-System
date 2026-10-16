@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Sun, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Calendar, Sun, Clock, CheckCircle2 } from 'lucide-react';
 import { markAttendance, requestLeave } from '../api';
 
 export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, onRefresh, onBreachDetected }) {
@@ -23,12 +23,12 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
     const reqDays = parseFloat(days);
-    if (!reqDays || reqDays <= 0) return alert('Enter a valid amount (e.g. 1 or 0.5)');
+    if (!reqDays || reqDays <= 0) return alert('Enter a valid amount (at least 0.5 days)');
     setLoading(true);
     try {
       const res = await requestLeave(currentEmp.id, { type: leaveType, days: reqDays, reason });
       if (res.exceeded) {
-        // Trigger both popup modal and dispatch notification preview
+        // Triggers the popup modal alert and reflects the sent email
         onBreachDetected(res);
       } else {
         alert('Leave approved successfully!');
@@ -45,7 +45,7 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Attendance & Switcher */}
+      {/* Attendance & Selector */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <label className="text-sm font-semibold text-slate-700">Viewing as:</label>
@@ -97,20 +97,20 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <div className="flex justify-between text-sm font-semibold text-slate-600">
-            Short Leaves <span className="bg-purple-50 text-purple-600 p-2 rounded-lg"><Clock className="w-4 h-4"/></span>
+            Short Leaves Taken <span className="bg-purple-50 text-purple-600 p-2 rounded-lg"><Clock className="w-4 h-4"/></span>
           </div>
-          <div className="mt-3 text-3xl font-bold text-slate-900">
-            {currentEmp.remainingShort ?? 2} <span className="text-sm text-slate-500 font-medium">remaining</span>
+          <div className="mt-3 text-3xl font-bold text-purple-700">
+            {currentEmp.shortLeavesTaken ?? 0} <span className="text-sm text-slate-500 font-medium">taken</span>
           </div>
-          <div className="text-xs text-slate-400 mt-1">Out of {currentEmp.allowedShort ?? 2} allowed quotas</div>
+          <div className="text-xs text-slate-400 mt-1">Logged directly by HR</div>
         </div>
       </div>
 
-      {/* Leave Request Form */}
+      {/* Apply for Leave Form */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-lg font-bold text-slate-900 mb-1">Apply for Leave</h3>
         <p className="text-xs text-slate-500 mb-4">
-          If your request exceeds remaining days, an instant popup alert appears and automated notifications are sent to HR and Admin.
+          Submissions exceeding your remaining quota will trigger an instant alert popup and dispatch email notifications to HR and Admin.
         </p>
         <form onSubmit={handleLeaveSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -123,11 +123,10 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
               >
                 <option value="annual">Annual Leave</option>
                 <option value="casual">Casual Leave</option>
-                <option value="short">Short Leave</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Days / Count Requested</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Days Requested</label>
               <input
                 type="number"
                 min="0.5"
@@ -144,7 +143,7 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
             <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Reason / Note</label>
             <input
               type="text"
-              placeholder="Reason for requesting leave"
+              placeholder="Reason for taking leave"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               required
