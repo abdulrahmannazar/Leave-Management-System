@@ -6,7 +6,15 @@ const nodemailer = require('nodemailer');
 const app = express();
 const prisma = new PrismaClient();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      'https://leave-management-system-rust.vercel.app',
+      'http://localhost:5173', 
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
