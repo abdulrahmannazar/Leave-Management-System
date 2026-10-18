@@ -1,18 +1,18 @@
 const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
-const { sendLeaveBreachEmail } = require('./notification'); // Imported modular notification logic
+const { sendLeaveBreachEmail } = require('./notification');
 
 const app = express();
 const prisma = new PrismaClient();
 
+// Proper CORS configuration that handles preflight automatically
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.options('*', cors());
 app.use(express.json());
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
@@ -44,7 +44,7 @@ app.get('/api/employees', async (req, res) => {
 app.post('/api/employees', async (req, res) => {
   const { name, dept, allowedAnnual, allowedCasual } = req.body;
   const annual = Math.max(0, roundToOneDecimal(parseFloat(allowedAnnual) || 0));
-  const casual = Math.max(0, roundToOneDecimal(parseFloat(casual) || 0));
+  const casual = Math.max(0, roundToOneDecimal(parseFloat(allowedCasual) || 0));
 
   try {
     const count = await prisma.employee.count();
@@ -146,7 +146,6 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
     if (numDays > currentRemaining) {
       const exceededBy = roundToOneDecimal(numDays - currentRemaining);
 
-      // Call our modular email function from notification.js
       await sendLeaveBreachEmail({
         employee: emp,
         leaveType: leaveTypeName,
