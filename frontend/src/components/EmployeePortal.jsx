@@ -9,14 +9,14 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!currentEmp) return <p className="text-center mt-10">No employees added yet.</p>;
+  if (!currentEmp) return <p className="text-center mt-10 text-slate-500">No employees found.</p>;
 
   const handleAttendance = async () => {
     try {
       await markAttendance(currentEmp.id);
       onRefresh();
     } catch (err) {
-      alert(err.message);
+      alert('Error marking attendance: ' + err.message);
     }
   };
 
@@ -24,13 +24,22 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
     e.preventDefault();
     const reqDays = parseFloat(days);
     if (!reqDays || reqDays <= 0) return alert('Enter a valid amount (at least 0.5 days)');
-    
+
     setLoading(true);
     try {
       const res = await requestLeave(currentEmp.id, { type: leaveType, days: reqDays, reason });
+
+      // Check if backend returned an error
+      if (res.error) {
+        alert('Server Error: ' + res.error);
+        return;
+      }
+
+      // Check if leave exceeds quota -> Launch popup modal
       if (res.exceeded) {
-        // Triggers the popup modal instantly
         onBreachDetected(res);
+        setDays('');
+        setReason('');
       } else {
         alert('Leave approved successfully!');
         setDays('');
@@ -38,9 +47,8 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
         onRefresh();
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      alert('Network Error: ' + err.message);
     } finally {
-      
       setLoading(false);
     }
   };
@@ -155,7 +163,7 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-sm transition shadow-sm"
+            className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-sm transition shadow-sm disabled:opacity-50"
           >
             {loading ? 'Processing...' : 'Submit Request'}
           </button>
