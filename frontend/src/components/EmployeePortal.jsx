@@ -24,11 +24,12 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
     e.preventDefault();
     const reqDays = parseFloat(days);
     if (!reqDays || reqDays <= 0) return alert('Enter a valid amount (at least 0.5 days)');
+    
     setLoading(true);
     try {
       const res = await requestLeave(currentEmp.id, { type: leaveType, days: reqDays, reason });
       if (res.exceeded) {
-        // Triggers the popup modal alert and reflects the sent email
+        // Triggers the popup modal instantly
         onBreachDetected(res);
       } else {
         alert('Leave approved successfully!');
@@ -39,6 +40,7 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
     } catch (err) {
       alert('Error: ' + err.message);
     } finally {
+      
       setLoading(false);
     }
   };
