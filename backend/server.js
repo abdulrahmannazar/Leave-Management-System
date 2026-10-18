@@ -6,7 +6,6 @@ const { sendLeaveBreachEmail } = require('./notification');
 const app = express();
 const prisma = new PrismaClient();
 
-// Proper CORS configuration that handles preflight automatically
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -127,26 +126,32 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
   }
 });
 
-// 6. Submit Leave Request & Delegate Breach Email to notification.js
+// 6. Submit Leave Request & Handle Breach
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
   const { type, days, reason } = req.body;
   const numDays = roundToOneDecimal(parseFloat(days));
 
+  if (isNaN(numDays) || numDays <= 0) {
+    return res.status(400).json({ error: 'Requested days must be at least 0.5.' });
+  }
+
   try {
     const emp = await prisma.employee.findUnique({ where: { id } });
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
-    const isAnnual = type === 'annual';
+    // Robust case-insensitive check
+    const isAnnual = String(type).toLowerCase().includes('annual');
     const remainingField = isAnnual ? 'remainingAnnual' : 'remainingCasual';
     const leaveTypeName = isAnnual ? 'Annual Leave' : 'Casual Leave';
     const currentRemaining = emp[remainingField];
 
-    // QUOTA BREACH SENTINEL: Triggers Email & Popup Flag
+    // QUOTA BREACH SENTINEL
     if (numDays > currentRemaining) {
       const exceededBy = roundToOneDecimal(numDays - currentRemaining);
 
-      await sendLeaveBreachEmail({
+      // Attempt email dispatch asynchronously without throwing
+      const emailResult = await sendLeaveBreachEmail({
         employee: emp,
         leaveType: leaveTypeName,
         requestedDays: numDays,
@@ -155,6 +160,7 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
         reason
       });
 
+      // Return breach alert to frontend so popup always triggers
       return res.status(200).json({
         exceeded: true,
         employee: emp,
@@ -162,7 +168,8 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
         requestedDays: numDays,
         leaveType: leaveTypeName,
         remaining: currentRemaining,
-        reason
+        reason,
+        emailSent: emailResult.success
       });
     }
 
@@ -171,9 +178,10 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
       where: { id },
       data: { [remainingField]: roundToOneDecimal(currentRemaining - numDays) }
     });
-    res.json({ exceeded: false, employee: updated });
+    return res.json({ exceeded: false, employee: updated });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to process leave request' });
+    console.error('Error processing leave request:', error);
+    return res.status(500).json({ error: 'Failed to process leave: ' + error.message });
   }
 });
 
@@ -184,7 +192,8 @@ app.post('/api/employees/:id/force-approve', async (req, res) => {
 
   try {
     const emp = await prisma.employee.findUnique({ where: { id } });
-    const remainingField = type.toLowerCase().includes('annual') ? 'remainingAnnual' : 'remainingCasual';
+    const isAnnual = String(type).toLowerCase().includes('annual');
+    const remainingField = isAnnual ? 'remainingAnnual' : 'remainingCasual';
 
     const updated = await prisma.employee.update({
       where: { id },
