@@ -1,37 +1,22 @@
 const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
-const nodemailer = require('nodemailer');
+const { sendLeaveBreachEmail } = require('./notification'); // Imported modular notification logic
 
 const app = express();
 const prisma = new PrismaClient();
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('*', cors());
 app.use(express.json());
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
-
-// Setup Mailer for Breach Notifications
-let transporter;
-nodemailer.createTestAccount().then((account) => {
-  transporter = nodemailer.createTransport({
-    host: account.smtp.host,
-    port: account.smtp.port,
-    secure: account.smtp.secure,
-    auth: { user: account.user, pass: account.pass }
-  });
-  console.log('Automated Notification Mailer is active');
-});
 
 const ensureDailyReset = async (emp) => {
   const today = getTodayString();
@@ -55,11 +40,11 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// 2. Add Employee (Allowed leaves locked at onboarding, shortLeavesTaken starts at 0)
+// 2. Add Employee
 app.post('/api/employees', async (req, res) => {
   const { name, dept, allowedAnnual, allowedCasual } = req.body;
   const annual = Math.max(0, roundToOneDecimal(parseFloat(allowedAnnual) || 0));
-  const casual = Math.max(0, roundToOneDecimal(parseFloat(allowedCasual) || 0));
+  const casual = Math.max(0, roundToOneDecimal(parseFloat(casual) || 0));
 
   try {
     const count = await prisma.employee.count();
@@ -84,7 +69,7 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-// 3. Update Remaining Leaves or Short Leaves Taken directly
+// 3. Update Remaining Leaves or Short Leaves Taken
 app.patch('/api/employees/:id/remaining', async (req, res) => {
   const { id } = req.params;
   const { remainingAnnual, remainingCasual, shortLeavesTaken } = req.body;
@@ -102,7 +87,7 @@ app.patch('/api/employees/:id/remaining', async (req, res) => {
   }
 });
 
-// 4. Quick Increment Short Leaves (+1 by HR)
+// 4. Quick Increment Short Leaves (+1)
 app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
   const { id } = req.params;
   try {
@@ -142,10 +127,10 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
   }
 });
 
-// 6. Submit Leave Request & Dispatch Alert on Limit Breach
+// 6. Submit Leave Request & Delegate Breach Email to notification.js
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
-  const { type, days, reason } = req.body; // 'annual' | 'casual'
+  const { type, days, reason } = req.body;
   const numDays = roundToOneDecimal(parseFloat(days));
 
   try {
@@ -161,25 +146,15 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
     if (numDays > currentRemaining) {
       const exceededBy = roundToOneDecimal(numDays - currentRemaining);
 
-      const mailOptions = {
-        from: '"LeaveCore Alert System" <no-reply@company.com>',
-        to: 'hr@company.com, admin@company.com',
-        subject: `🚨 URGENT: Leave Quota Exceeded by ${emp.name} (${emp.id})`,
-        text: `Employee Alert:
-Employee: ${emp.name} (${emp.id}) - ${emp.dept}
-Leave Type: ${leaveTypeName}
-Requested: ${numDays}
-Remaining Balance: ${currentRemaining}
-Exceeded By: ${exceededBy}
-Reason: ${reason || 'None provided'}
-
-An automated popup alert has also been displayed on the portal.`
-      };
-
-      if (transporter) {
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Breach email dispatched to HR & Admin! Preview:', nodemailer.getTestMessageUrl(info));
-      }
+      // Call our modular email function from notification.js
+      await sendLeaveBreachEmail({
+        employee: emp,
+        leaveType: leaveTypeName,
+        requestedDays: numDays,
+        currentRemaining,
+        exceededBy,
+        reason
+      });
 
       return res.status(200).json({
         exceeded: true,
