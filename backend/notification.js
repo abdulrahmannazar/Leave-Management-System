@@ -1,60 +1,46 @@
 // backend/notification.js
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// Use the built-in 'gmail' service driver rather than manual ports
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, '') : '' // strips any accidental spaces
-  }
-});
-
-// Verify connection configuration on startup
-if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ Gmail SMTP Verification Failed:', error.message);
-    } else {
-      console.log('✅ Gmail SMTP Server is ready to send notifications');
-    }
-  });
-} else {
-  console.warn('⚠️ EMAIL_USER or EMAIL_PASS not set. Emails will be skipped.');
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendLeaveBreachEmail = async ({ employee, leaveType, requestedDays, currentRemaining, exceededBy, reason }) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ SMTP credentials not found. Skipping email dispatch.');
-    return { success: false, reason: 'Credentials missing' };
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️ RESEND_API_KEY not configured. Skipping email dispatch.');
+    return { success: false, reason: 'API key missing' };
   }
 
-  const hrEmail = process.env.HR_NOTIFICATION_EMAIL || process.env.EMAIL_USER;
+  // Set the destination email to your target inbox
+  const hrEmail = process.env.HR_NOTIFICATION_EMAIL || 'your-email@gmail.com';
   const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || hrEmail;
 
-  const mailOptions = {
-    from: `"LeaveCore Alert" <${process.env.EMAIL_USER}>`,
-    to: `${hrEmail}, ${adminEmail}`,
-    subject: `🚨 URGENT: Leave Quota Exceeded by ${employee.name} (${employee.id})`,
-    text: `Hello HR & Administration,
-
-Quota Breach Alert:
-- Employee: ${employee.name} (${employee.id}) - ${employee.dept}
-- Leave Category: ${leaveType}
-- Days Requested: ${requestedDays}
-- Remaining Balance: ${currentRemaining}
-- Quota Exceeded By: ${exceededBy} days
-- Reason: ${reason || 'None provided'}
-
-An automated popup notification has also been triggered on the management portal.`
-  };
-
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Breach email sent successfully to:', hrEmail, adminEmail, 'ID:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    const data = await resend.emails.send({
+      from: 'LeaveCore System <onboarding@resend.dev>', // Free default sending address provided by Resend
+      to: [hrEmail],
+      subject: `🚨 URGENT: Leave Quota Exceeded by ${employee.name} (${employee.id})`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #dc2626;">🚨 Leave Quota Breach Notification</h2>
+          <p>An employee has submitted a leave request that exceeds their remaining balance:</p>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr><td style="padding: 8px; font-weight: bold; width: 180px;">Employee:</td><td>${employee.name} (${employee.id}) - ${employee.dept}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Leave Category:</td><td>${leaveType}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Days Requested:</td><td>${requestedDays} days</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Remaining Balance:</td><td>${currentRemaining} days</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold; color: #dc2626;">Exceeded Quota By:</td><td style="color: #dc2626; font-weight: bold;">${exceededBy} days</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Reason / Note:</td><td>${reason || 'None provided'}</td></tr>
+          </table>
+          <p style="margin-top: 20px; font-size: 13px; color: #666;">
+            This automated email was triggered alongside a high-priority dashboard popup modal.
+          </p>
+        </div>
+      `
+    });
+
+    console.log('✅ Breach email dispatched via Resend HTTPS API. ID:', data.id);
+    return { success: true, id: data.id };
   } catch (error) {
-    console.error('❌ SMTP dispatch failed:', error.message);
+    console.error('❌ Resend API dispatch failed:', error.message);
     return { success: false, error: error.message };
   }
 };
