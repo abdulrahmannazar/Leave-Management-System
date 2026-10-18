@@ -1,31 +1,32 @@
 // backend/notification.js
 const nodemailer = require('nodemailer');
 
-let transporter;
-
-// Initialize test email account
-nodemailer.createTestAccount().then((account) => {
-  transporter = nodemailer.createTransport({
-    host: account.smtp.host,
-    port: account.smtp.port,
-    secure: account.smtp.secure,
-    auth: { user: account.user, pass: account.pass }
-  });
-  console.log('📧 Notification Mailer Service is active');
+// Create a reusable transporter using your real SMTP configuration
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.EMAIL_PORT || '465', 10),
+  secure: true, // true for 465, false for other ports
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
 });
 
 /**
- * Sends an email notification to HR and Admin when an employee exceeds their leave quota.
+ * Sends a real email notification to HR and Admin when an employee exceeds their leave quota.
  */
 const sendLeaveBreachEmail = async ({ employee, leaveType, requestedDays, currentRemaining, exceededBy, reason }) => {
-  if (!transporter) {
-    console.warn('⚠️ Mailer transporter not yet ready.');
-    return;
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠️ SMTP credentials (EMAIL_USER / EMAIL_PASS) not configured in .env. Skipping real email dispatch.');
+    return { simulated: true };
   }
 
+  const hrEmail = process.env.HR_NOTIFICATION_EMAIL || 'hr@company.com';
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@company.com';
+
   const mailOptions = {
-    from: '"LeaveCore Alert System" <no-reply@company.com>',
-    to: 'hr@company.com, admin@company.com',
+    from: `"LeaveCore System" <${process.env.EMAIL_USER}>`,
+    to: `${hrEmail}, ${adminEmail}`,
     subject: `🚨 URGENT: Leave Quota Exceeded by ${employee.name} (${employee.id})`,
     text: `Hello HR & Administration,
 
@@ -42,10 +43,11 @@ Action Required: An automated popup notification has been triggered on the manag
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Breach email dispatched! Preview URL:', nodemailer.getTestMessageUrl(info));
+    console.log('✅ Real breach email successfully sent to HR & Admin:', info.messageId);
     return info;
   } catch (error) {
-    console.error('❌ Failed to dispatch breach email:', error);
+    console.error('❌ Failed to send real breach email via SMTP:', error);
+    throw error;
   }
 };
 
