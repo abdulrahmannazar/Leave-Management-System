@@ -68,6 +68,7 @@ export default function App() {
               <h1 className="font-bold text-slate-900 leading-none">Leave management system</h1>
               <p className="text-xs text-slate-500 mt-0.5">{currentUser.dept} Department</p>
             </div>
+            
           </div>
 
           <div className="flex items-center gap-4">
