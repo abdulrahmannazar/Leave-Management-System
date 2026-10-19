@@ -88,7 +88,7 @@ export default function LoginPage({ onLoginSuccess }) {
           </div>
         </div>
         <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900">
-          LeaveCore Portal
+          Leave Management System Portal
         </h2>
         <p className="mt-1 text-center text-sm text-slate-600">
           Departmental Leave & Attendance Management

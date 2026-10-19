@@ -65,7 +65,7 @@ export default function App() {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-900 leading-none">LeaveCore</h1>
+              <h1 className="font-bold text-slate-900 leading-none">Leave management system</h1>
               <p className="text-xs text-slate-500 mt-0.5">{currentUser.dept} Department</p>
             </div>
           </div>
