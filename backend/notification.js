@@ -15,7 +15,7 @@ const sendLeaveBreachEmail = async ({ employee, leaveType, requestedDays, curren
 
   try {
     const data = await resend.emails.send({
-      from: 'LeaveCore System <onboarding@resend.dev>', // Free default sending address provided by Resend
+      from: 'Leave Management System <onboarding@resend.dev>', // Free default sending address provided by Resend
       to: [hrEmail],
       subject: `🚨 URGENT: Leave Quota Exceeded by ${employee.name} (${employee.id})`,
       html: `

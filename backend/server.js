@@ -17,14 +17,36 @@ app.use(express.json());
 const getTodayString = () => new Date().toISOString().split('T')[0];
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
 
+// Monthly limit policy
+const MONTHLY_SHORT_LEAVE_LIMIT = 2;
+
+// Daily attendance & monthly short leave quota reset helper
 const ensureDailyReset = async (emp) => {
   const today = getTodayString();
+  const currentMonth = today.slice(0, 7); // 'YYYY-MM'
+  const empMonth = emp.attendanceDate ? emp.attendanceDate.slice(0, 7) : currentMonth;
+
+  const updateData = {};
+
+  // Daily reset for attendance
   if (emp.attendanceDate !== today) {
+    updateData.attendanceDate = today;
+    updateData.presentToday = false;
+    updateData.presentTime = null;
+  }
+
+  // Monthly reset for short leaves (new calendar month)
+  if (empMonth !== currentMonth) {
+    updateData.shortLeavesTaken = 0;
+  }
+
+  if (Object.keys(updateData).length > 0) {
     return await prisma.employee.update({
       where: { id: emp.id },
-      data: { attendanceDate: today, presentToday: false, presentTime: null }
+      data: updateData
     });
   }
+
   return emp;
 };
 
@@ -68,7 +90,7 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-// 3. Update Remaining Leaves or Short Leaves Taken
+// 3. Update Remaining Leaves or Short Leaves Taken directly by HR
 app.patch('/api/employees/:id/remaining', async (req, res) => {
   const { id } = req.params;
   const { remainingAnnual, remainingCasual, shortLeavesTaken } = req.body;
@@ -86,12 +108,14 @@ app.patch('/api/employees/:id/remaining', async (req, res) => {
   }
 });
 
-// 4. Quick Increment Short Leaves (+1)
+// 4. Quick Increment Short Leaves (+1 by HR)
 app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
   const { id } = req.params;
   try {
-    const emp = await prisma.employee.findUnique({ where: { id } });
+    let emp = await prisma.employee.findUnique({ where: { id } });
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    emp = await ensureDailyReset(emp);
 
     const updated = await prisma.employee.update({
       where: { id },
@@ -126,46 +150,84 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
   }
 });
 
-// 6. Submit Leave Request & Handle Breach
+// 6. Submit Leave Request & Enforce Quotas (Annual, Casual, Short Leave)
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
   const { type, days, reason } = req.body;
-  const numDays = roundToOneDecimal(parseFloat(days));
+  const requestedAmount = roundToOneDecimal(parseFloat(days));
 
-  if (isNaN(numDays) || numDays <= 0) {
-    return res.status(400).json({ error: 'Requested days must be at least 0.5.' });
+  if (isNaN(requestedAmount) || requestedAmount <= 0) {
+    return res.status(400).json({ error: 'Requested amount must be at least 0.5.' });
   }
 
   try {
-    const emp = await prisma.employee.findUnique({ where: { id } });
+    let emp = await prisma.employee.findUnique({ where: { id } });
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
-    // Robust case-insensitive check
-    const isAnnual = String(type).toLowerCase().includes('annual');
+    emp = await ensureDailyReset(emp);
+
+    const selectedType = String(type).toLowerCase();
+
+    // ---------------- SHORT LEAVE EVALUATION (Max 2 per month) ----------------
+    if (selectedType.includes('short')) {
+      const currentTaken = emp.shortLeavesTaken;
+      const remainingShort = Math.max(0, roundToOneDecimal(MONTHLY_SHORT_LEAVE_LIMIT - currentTaken));
+
+      if (currentTaken + requestedAmount > MONTHLY_SHORT_LEAVE_LIMIT) {
+        const exceededBy = roundToOneDecimal((currentTaken + requestedAmount) - MONTHLY_SHORT_LEAVE_LIMIT);
+
+        const emailResult = await sendLeaveBreachEmail({
+          employee: emp,
+          leaveType: 'Short Leave (Monthly Cap: 2)',
+          requestedDays: requestedAmount,
+          currentRemaining: remainingShort,
+          exceededBy,
+          reason
+        });
+
+        return res.status(200).json({
+          exceeded: true,
+          employee: emp,
+          exceededBy,
+          requestedDays: requestedAmount,
+          leaveType: 'Short Leave',
+          remaining: remainingShort,
+          reason,
+          emailSent: emailResult.success
+        });
+      }
+
+      // Within monthly quota -> increment short leaves taken
+      const updated = await prisma.employee.update({
+        where: { id },
+        data: { shortLeavesTaken: roundToOneDecimal(currentTaken + requestedAmount) }
+      });
+      return res.json({ exceeded: false, employee: updated });
+    }
+
+    // ---------------- ANNUAL / CASUAL LEAVE EVALUATION ----------------
+    const isAnnual = selectedType.includes('annual');
     const remainingField = isAnnual ? 'remainingAnnual' : 'remainingCasual';
     const leaveTypeName = isAnnual ? 'Annual Leave' : 'Casual Leave';
     const currentRemaining = emp[remainingField];
 
-    // QUOTA BREACH SENTINEL
-    if (numDays > currentRemaining) {
-      const exceededBy = roundToOneDecimal(numDays - currentRemaining);
+    if (requestedAmount > currentRemaining) {
+      const exceededBy = roundToOneDecimal(requestedAmount - currentRemaining);
 
-      // Attempt email dispatch asynchronously without throwing
       const emailResult = await sendLeaveBreachEmail({
         employee: emp,
         leaveType: leaveTypeName,
-        requestedDays: numDays,
+        requestedDays: requestedAmount,
         currentRemaining,
         exceededBy,
         reason
       });
 
-      // Return breach alert to frontend so popup always triggers
       return res.status(200).json({
         exceeded: true,
         employee: emp,
         exceededBy,
-        requestedDays: numDays,
+        requestedDays: requestedAmount,
         leaveType: leaveTypeName,
         remaining: currentRemaining,
         reason,
@@ -176,28 +238,37 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
     // Within quota
     const updated = await prisma.employee.update({
       where: { id },
-      data: { [remainingField]: roundToOneDecimal(currentRemaining - numDays) }
+      data: { [remainingField]: roundToOneDecimal(currentRemaining - requestedAmount) }
     });
     return res.json({ exceeded: false, employee: updated });
+
   } catch (error) {
     console.error('Error processing leave request:', error);
     return res.status(500).json({ error: 'Failed to process leave: ' + error.message });
   }
 });
 
-// 7. Force Approve Exceeded Leave
+// 7. Force Approve Exceeded Leave (Overdraft)
 app.post('/api/employees/:id/force-approve', async (req, res) => {
   const { id } = req.params;
   const { type, days } = req.body;
 
   try {
     const emp = await prisma.employee.findUnique({ where: { id } });
-    const isAnnual = String(type).toLowerCase().includes('annual');
-    const remainingField = isAnnual ? 'remainingAnnual' : 'remainingCasual';
+    const selectedType = String(type).toLowerCase();
+
+    let updateData = {};
+    if (selectedType.includes('short')) {
+      updateData = { shortLeavesTaken: roundToOneDecimal(emp.shortLeavesTaken + parseFloat(days)) };
+    } else if (selectedType.includes('annual')) {
+      updateData = { remainingAnnual: roundToOneDecimal(emp.remainingAnnual - parseFloat(days)) };
+    } else {
+      updateData = { remainingCasual: roundToOneDecimal(emp.remainingCasual - parseFloat(days)) };
+    }
 
     const updated = await prisma.employee.update({
       where: { id },
-      data: { [remainingField]: roundToOneDecimal(emp[remainingField] - parseFloat(days)) }
+      data: updateData
     });
     res.json({ success: true, employee: updated });
   } catch (error) {
