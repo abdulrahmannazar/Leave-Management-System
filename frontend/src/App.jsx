@@ -141,6 +141,7 @@ export default function App() {
           <EmployeePortal
             currentUser={currentUser}
             employees={employees}
+            leaveRequests={leaveRequests}
             onRefresh={loadData}
             onBreachDetected={setBreachData}
           />

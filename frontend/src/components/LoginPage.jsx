@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Lock, Mail, User, Building2, Briefcase, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { loginUser, registerUser } from '../api';
 
 const DEPARTMENTS = ['Audit', 'Tax', 'Secretarial', 'HR', 'Accounting'];
+
+// Removed EMPLOYEE from self-registration (Employees are added by HR, Managers, or Supervisors)
 const ROLES = [
-  { value: 'EMPLOYEE', label: 'Employee' },
   { value: 'SUPERVISOR', label: 'Supervisor' },
   { value: 'MANAGER', label: 'Department Manager (Max 1 per Dept)' },
   { value: 'HR', label: 'HR Officer' },
@@ -25,7 +26,7 @@ export default function LoginPage({ onLoginSuccess }) {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regRole, setRegRole] = useState('EMPLOYEE');
+  const [regRole, setRegRole] = useState('SUPERVISOR');
   const [regDept, setRegDept] = useState('Audit');
   const [allowedAnnual, setAllowedAnnual] = useState(14);
   const [allowedCasual, setAllowedCasual] = useState(7);
@@ -115,7 +116,7 @@ export default function LoginPage({ onLoginSuccess }) {
                 mode === 'register' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Register Account
+              Management Register
             </button>
           </div>
 
@@ -185,6 +186,10 @@ export default function LoginPage({ onLoginSuccess }) {
           ) : (
             /* ==================== REGISTER FORM ==================== */
             <form className="space-y-4" onSubmit={handleRegister}>
+              <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-[11px] text-indigo-800">
+                <strong>Note:</strong> Employee accounts are created by HR, Department Managers, or Supervisors inside the portal.
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                   Full Name
@@ -254,37 +259,33 @@ export default function LoginPage({ onLoginSuccess }) {
                   <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                     Role
                   </label>
-                  <div className="relative">
-                    <select
-                      value={regRole}
-                      onChange={(e) => {
-                        setRegRole(e.target.value);
-                        if (e.target.value === 'HR') setRegDept('HR');
-                      }}
-                      className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-600"
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    value={regRole}
+                    onChange={(e) => {
+                      setRegRole(e.target.value);
+                      if (e.target.value === 'HR') setRegDept('HR');
+                    }}
+                    className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-600"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                     Department
                   </label>
-                  <div className="relative">
-                    <select
-                      value={regDept}
-                      onChange={(e) => setRegDept(e.target.value)}
-                      className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-600"
-                    >
-                      {DEPARTMENTS.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    value={regDept}
+                    onChange={(e) => setRegDept(e.target.value)}
+                    className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-600"
+                  >
+                    {DEPARTMENTS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

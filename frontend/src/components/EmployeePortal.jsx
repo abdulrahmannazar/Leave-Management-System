@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { Calendar, Sun, Clock, CheckCircle2, Building2 } from 'lucide-react';
+import { Calendar, Sun, Clock, CheckCircle2, XCircle, AlertTriangle, Building2 } from 'lucide-react';
 import { markAttendance, requestLeave } from '../api';
 
-export default function EmployeePortal({ currentUser, employees, onRefresh, onBreachDetected }) {
+export default function EmployeePortal({
+  currentUser,
+  employees,
+  leaveRequests = [],
+  onRefresh,
+  onBreachDetected
+}) {
   const currentEmp = employees.find((e) => e.id === currentUser.id) || currentUser;
   const [leaveType, setLeaveType] = useState('annual');
   const [days, setDays] = useState('1');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Filter leave requests belonging to the logged-in employee
+  const myLeaveRequests = leaveRequests.filter((req) => req.employeeId === currentEmp.id);
 
   const handleAttendance = async () => {
     try {
@@ -36,7 +45,7 @@ export default function EmployeePortal({ currentUser, employees, onRefresh, onBr
       if (res.exceeded) {
         onBreachDetected(res);
       } else {
-        alert('Leave request submitted for approval! HR has also been notified.');
+        alert('Leave request submitted! You can track its approval status below.');
       }
       setDays('1');
       setReason('');
@@ -114,7 +123,7 @@ export default function EmployeePortal({ currentUser, employees, onRefresh, onBr
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-lg font-bold text-slate-900 mb-1">Apply for Leave</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Your request will be sent to your Department Supervisor/Manager for approval and notified to HR. Only HR reduces remaining leave balances.
+          Your request will be sent to your Department Supervisor/Manager for approval and notified to HR.
         </p>
         <form onSubmit={handleLeaveSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -164,6 +173,95 @@ export default function EmployeePortal({ currentUser, employees, onRefresh, onBr
             {loading ? 'Submitting...' : 'Submit Leave Request'}
           </button>
         </form>
+      </div>
+
+      {/* My Leave Request Status History */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200">
+          <h3 className="text-lg font-bold text-slate-900">My Leave Requests & Status</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Track whether your submitted leave requests are Pending, Approved, or Rejected.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                <th className="px-5 py-3">Date</th>
+                <th className="px-5 py-3">Leave Category</th>
+                <th className="px-5 py-3">Days / Count</th>
+                <th className="px-5 py-3">Reason</th>
+                <th className="px-5 py-3 text-center">Quota Status</th>
+                <th className="px-5 py-3 text-center">Approval Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {myLeaveRequests.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="text-center py-8 text-sm text-slate-400">
+                    You have not submitted any leave requests yet.
+                  </td>
+                </tr>
+              ) : (
+                myLeaveRequests.map((req) => (
+                  <tr key={req.id} className="hover:bg-slate-50 transition">
+                    <td className="px-5 py-3.5 text-xs text-slate-500 whitespace-nowrap">
+                      {new Date(req.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-5 py-3.5 font-semibold text-sm text-slate-900">
+                      {req.leaveType}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm font-bold text-indigo-600">
+                      {req.days} {req.leaveType === 'Short Leave' ? 'Count' : 'Days'}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-slate-600 max-w-xs">
+                      {req.reason}
+                    </td>
+                    <td className="px-5 py-3.5 text-center">
+                      {req.exceedsQuota ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                          <AlertTriangle className="w-3 h-3" /> Exceeds by {req.exceededBy}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
+                          Within Quota
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-center">
+                      {req.status === 'PENDING' && (
+                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                          <Clock className="w-3 h-3" /> Pending Approval
+                        </span>
+                      )}
+                      {req.status === 'APPROVED' && (
+                        <div>
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            <CheckCircle2 className="w-3 h-3" /> Approved
+                          </span>
+                          {req.approvedBy && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">by {req.approvedBy}</div>
+                          )}
+                        </div>
+                      )}
+                      {req.status === 'REJECTED' && (
+                        <div>
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                            <XCircle className="w-3 h-3" /> Rejected
+                          </span>
+                          {req.approvedBy && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">by {req.approvedBy}</div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
