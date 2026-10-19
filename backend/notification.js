@@ -3,46 +3,70 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const sendLeaveBreachEmail = async ({ employee, leaveType, requestedDays, currentRemaining, exceededBy, reason }) => {
+const sendLeaveNotificationEmail = async ({
+  eventType, // 'LEAVE_REQUESTED' | 'LEAVE_APPROVED'
+  employee,
+  leaveType,
+  requestedDays,
+  currentRemaining,
+  exceedsQuota,
+  exceededBy,
+  reason,
+  approvedBy
+}) => {
   if (!process.env.RESEND_API_KEY) {
     console.warn('⚠️ RESEND_API_KEY not configured. Skipping email dispatch.');
     return { success: false, reason: 'API key missing' };
   }
 
-  // Set the destination email to your target inbox
-  const hrEmail = process.env.HR_NOTIFICATION_EMAIL || 'your-email@gmail.com';
-  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || hrEmail;
+  const hrEmail = process.env.HR_NOTIFICATION_EMAIL;
+  if (!hrEmail) {
+    console.error('❌ HR_NOTIFICATION_EMAIL is not set in environment variables.');
+    return { success: false, reason: 'Recipient email missing' };
+  }
+
+  const isBreach = exceedsQuota && exceededBy > 0;
+  const subjectPrefix = isBreach ? '🚨 URGENT QUOTA EXCEEDED:' : '📋 Leave Notification:';
+  const actionLabel = eventType === 'LEAVE_APPROVED' ? `Approved by ${approvedBy}` : 'New Leave Requested';
 
   try {
-    const data = await resend.emails.send({
-      from: 'Leave Management System <onboarding@resend.dev>', // Free default sending address provided by Resend
+    const { data, error } = await resend.emails.send({
+      from: 'leaveManagementSystem <onboarding@resend.dev>',
       to: [hrEmail],
-      subject: `🚨 URGENT: Leave Quota Exceeded by ${employee.name} (${employee.id})`,
+      subject: `${subjectPrefix} ${employee.name} (${employee.dept}) - ${actionLabel}`,
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #dc2626;">🚨 Leave Quota Breach Notification</h2>
-          <p>An employee has submitted a leave request that exceeds their remaining balance:</p>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <tr><td style="padding: 8px; font-weight: bold; width: 180px;">Employee:</td><td>${employee.name} (${employee.id}) - ${employee.dept}</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Leave Category:</td><td>${leaveType}</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Days Requested:</td><td>${requestedDays} days</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Remaining Balance:</td><td>${currentRemaining} days</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold; color: #dc2626;">Exceeded Quota By:</td><td style="color: #dc2626; font-weight: bold;">${exceededBy} days</td></tr>
-            <tr><td style="padding: 8px; font-weight: bold;">Reason / Note:</td><td>${reason || 'None provided'}</td></tr>
-          </table>
-          <p style="margin-top: 20px; font-size: 13px; color: #666;">
-            This automated email was triggered alongside a high-priority dashboard popup modal.
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid ${isBreach ? '#dc2626' : '#cbd5e1'}; border-radius: 8px;">
+          <h2 style="color: ${isBreach ? '#dc2626' : '#4f46e5'}; margin-top: 0;">
+            ${isBreach ? '🚨 Leave Quota Exceeded Alert' : '📋 Leave Taken / Action Notification for HR'}
+          </h2>
+          <p>
+            <strong>Status:</strong> ${actionLabel}<br/>
+            Please review and manually adjust the employee's remaining leave count in the HR Records Table.
           </p>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr><td style="padding: 8px; font-weight: bold; width: 170px;">Employee:</td><td>${employee.name} (${employee.id})</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Department & Role:</td><td>${employee.dept} (${employee.role})</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Leave Category:</td><td>${leaveType}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Days / Count Taken:</td><td>${requestedDays}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Current Remaining:</td><td>${currentRemaining}</td></tr>
+            ${isBreach ? `<tr><td style="padding: 8px; font-weight: bold; color: #dc2626;">Exceeded Quota By:</td><td style="color: #dc2626; font-weight: bold;">${exceededBy}</td></tr>` : ''}
+            <tr><td style="padding: 8px; font-weight: bold;">Reason:</td><td>${reason || 'None provided'}</td></tr>
+          </table>
         </div>
       `
     });
 
-    console.log('✅ Breach email dispatched via Resend HTTPS API. ID:', data.id);
+    if (error) {
+      console.error('❌ Resend API Error:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ HR Notification email dispatched! ID:', data.id);
     return { success: true, id: data.id };
-  } catch (error) {
-    console.error('❌ Resend API dispatch failed:', error.message);
-    return { success: false, error: error.message };
+  } catch (err) {
+    console.error('❌ Unexpected email error:', err.message);
+    return { success: false, error: err.message };
   }
 };
 
-module.exports = { sendLeaveBreachEmail };
+module.exports = { sendLeaveNotificationEmail };

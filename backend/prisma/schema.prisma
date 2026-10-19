@@ -8,18 +8,33 @@ datasource db {
 }
 
 model Employee {
-  id               String   @id
+  id               String         @id
   name             String
-  email            String   @unique
+  email            String         @unique
   password         String
-  role             String   @default("EMPLOYEE") // "EMPLOYEE" | "HR" | "MANAGER" | "SUPERVISOR"
-  dept             String
-  allowedAnnual    Float
-  remainingAnnual  Float
-  allowedCasual    Float
-  remainingCasual  Float
-  shortLeavesTaken Float    @default(0)
+  role             String         @default("EMPLOYEE") // "ADMIN" | "HR" | "MANAGER" | "SUPERVISOR" | "EMPLOYEE"
+  dept             String         // "Audit" | "Tax" | "Secretarial" | "HR" | "Accounting"
+  allowedAnnual    Float          @default(14)
+  remainingAnnual  Float          @default(14)
+  allowedCasual    Float          @default(7)
+  remainingCasual  Float          @default(7)
+  shortLeavesTaken Float          @default(0)
   attendanceDate   String
-  presentToday     Boolean  @default(false)
+  presentToday     Boolean        @default(false)
   presentTime      String?
+  leaveRequests    LeaveRequest[]
+}
+
+model LeaveRequest {
+  id           Int      @id @default(autoincrement())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    String   // "Annual Leave" | "Casual Leave" | "Short Leave"
+  days         Float
+  reason       String
+  status       String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  approvedBy   String?
+  exceedsQuota Boolean  @default(false)
+  exceededBy   Float    @default(0)
+  createdAt    DateTime @default(now())
 }

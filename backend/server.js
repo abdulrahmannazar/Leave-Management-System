@@ -3,7 +3,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
-const { sendLeaveBreachEmail } = require('./notification');
+const { sendLeaveNotificationEmail } = require('./notification');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -21,34 +21,19 @@ const getTodayString = () => new Date().toISOString().split('T')[0];
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
 const MONTHLY_SHORT_LEAVE_LIMIT = 2;
 
-// Auto-seed default accounts on server boot
-const seedDefaultUsers = async () => {
-  try {
-    const count = await prisma.employee.count();
-    if (count === 0) {
-      console.log('🌱 Seeding initial role-based users...');
-      const hashedPassword = await bcrypt.hash('password123', 10);
-      const today = getTodayString();
+// Helper to generate unique Employee IDs by Role
+const generateEmployeeId = async (role) => {
+  const prefix =
+    role === 'ADMIN' ? 'ADM' :
+    role === 'HR' ? 'HR' :
+    role === 'MANAGER' ? 'MGR' :
+    role === 'SUPERVISOR' ? 'SUP' : 'EMP';
 
-      const defaultUsers = [
-        { id: 'HR001', name: 'Sarah Connor', email: 'hr@company.com', password: hashedPassword, role: 'HR', dept: 'Human Resources', allowedAnnual: 14, remainingAnnual: 14, allowedCasual: 7, remainingCasual: 7, shortLeavesTaken: 0, attendanceDate: today },
-        { id: 'MGR001', name: 'Alex Henderson', email: 'manager@company.com', password: hashedPassword, role: 'MANAGER', dept: 'Operations', allowedAnnual: 14, remainingAnnual: 12, allowedCasual: 7, remainingCasual: 6, shortLeavesTaken: 0, attendanceDate: today },
-        { id: 'SUP001', name: 'Daniel Craig', email: 'supervisor@company.com', password: hashedPassword, role: 'SUPERVISOR', dept: 'Engineering', allowedAnnual: 14, remainingAnnual: 10, allowedCasual: 7, remainingCasual: 5, shortLeavesTaken: 1, attendanceDate: today },
-        { id: 'EMP001', name: 'Musharif Khan', email: 'musharif@company.com', password: hashedPassword, role: 'EMPLOYEE', dept: 'Tax & Compliance', allowedAnnual: 14, remainingAnnual: 2, allowedCasual: 7, remainingCasual: 1, shortLeavesTaken: 0, attendanceDate: today }
-      ];
-
-      for (const u of defaultUsers) {
-        await prisma.employee.create({ data: u });
-      }
-      console.log('✅ Default users seeded successfully.');
-    }
-  } catch (err) {
-    console.error('Seeding error:', err.message);
-  }
+  const count = await prisma.employee.count();
+  return `${prefix}${String(count + 1).padStart(3, '0')}-${Math.floor(10 + Math.random() * 90)}`;
 };
-seedDefaultUsers();
 
-// Middleware: Reset daily attendance and monthly short leaves
+// Daily attendance & monthly short leave reset
 const ensureDailyReset = async (emp) => {
   const today = getTodayString();
   const currentMonth = today.slice(0, 7);
@@ -72,13 +57,76 @@ const ensureDailyReset = async (emp) => {
   return emp;
 };
 
-// ================= AUTH ROUTES =================
+// ================= AUTHENTICATION ROUTES =================
 
-// 1. User Login (Role-based)
+// 1. Register a New User
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, role, dept, allowedAnnual, allowedCasual } = req.body;
+
+  if (!name || !email || !password || !role || !dept) {
+    return res.status(400).json({ error: 'All fields (Name, Email, Password, Role, Department) are required.' });
+  }
+
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+    const existingEmail = await prisma.employee.findUnique({ where: { email: cleanEmail } });
+    if (existingEmail) {
+      return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
+
+    // Rule 3: Each department can only have 1 Manager
+    if (role === 'MANAGER') {
+      const existingManager = await prisma.employee.findFirst({
+        where: { dept, role: 'MANAGER' }
+      });
+      if (existingManager) {
+        return res.status(400).json({
+          error: `The ${dept} department already has a Manager (${existingManager.name}). Only 1 Manager is allowed per department.`
+        });
+      }
+    }
+
+    const id = await generateEmployeeId(role);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const annual = Math.max(0, roundToOneDecimal(parseFloat(allowedAnnual ?? 14)));
+    const casual = Math.max(0, roundToOneDecimal(parseFloat(allowedCasual ?? 7)));
+
+    const newUser = await prisma.employee.create({
+      data: {
+        id,
+        name: name.trim(),
+        email: cleanEmail,
+        password: hashedPassword,
+        role,
+        dept,
+        allowedAnnual: annual,
+        remainingAnnual: annual,
+        allowedCasual: casual,
+        remainingCasual: casual,
+        shortLeavesTaken: 0,
+        attendanceDate: getTodayString()
+      }
+    });
+
+    const token = jwt.sign(
+      { id: newUser.id, email: newUser.email, role: newUser.role, dept: newUser.dept, name: newUser.name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const { password: _, ...userSafe } = newUser;
+    res.status(201).json({ token, user: userSafe });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed: ' + error.message });
+  }
+});
+
+// 2. Login User
 app.post('/api/auth/login', async (req, res) => {
-  const { identifier, password } = req.body; // Accepts email OR employee ID
+  const { identifier, password } = req.body;
   if (!identifier || !password) {
-    return res.status(400).json({ error: 'Please enter both Email/Employee ID and Password.' });
+    return res.status(400).json({ error: 'Please enter both Email/ID and Password.' });
   }
 
   try {
@@ -92,16 +140,16 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials. User not found.' });
+      return res.status(401).json({ error: 'Account not found. Please check your credentials or register.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid password. Please try again.' });
+      return res.status(401).json({ error: 'Invalid password.' });
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
+      { id: user.id, email: user.email, role: user.role, dept: user.dept, name: user.name },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -109,15 +157,16 @@ app.post('/api/auth/login', async (req, res) => {
     const { password: _, ...userSafe } = user;
     res.json({ token, user: userSafe });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error during login.' });
+    res.status(500).json({ error: 'Server error during login.' });
   }
 });
 
-// 2. Fetch all employees
+// ================= EMPLOYEE & HIERARCHY ROUTES =================
+
+// 3. Get Employees
 app.get('/api/employees', async (req, res) => {
   try {
-    let employees = await prisma.employee.findMany({ orderBy: { id: 'asc' } });
+    let employees = await prisma.employee.findMany({ orderBy: { name: 'asc' } });
     employees = await Promise.all(employees.map(ensureDailyReset));
     const sanitized = employees.map(({ password, ...u }) => u);
     res.json(sanitized);
@@ -126,25 +175,53 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// 3. Add Employee
+// 4. Add Employee Credentials (Used by HR, Managers, Supervisors, Admin)
 app.post('/api/employees', async (req, res) => {
-  const { name, email, dept, role, password, allowedAnnual, allowedCasual } = req.body;
-  const annual = Math.max(0, roundToOneDecimal(parseFloat(allowedAnnual) || 0));
-  const casual = Math.max(0, roundToOneDecimal(parseFloat(allowedCasual) || 0));
+  const { name, email, password, role, dept, allowedAnnual, allowedCasual, creatorRole, creatorDept } = req.body;
+
+  if (!name || !email || !password || !role || !dept) {
+    return res.status(400).json({ error: 'Name, Email, Password, Role, and Department are required.' });
+  }
+
+  // Enforce hierarchy permissions when adding staff
+  if (creatorRole === 'SUPERVISOR' && (dept !== creatorDept || role !== 'EMPLOYEE')) {
+    return res.status(403).json({ error: 'Supervisors can only add Employees to their own department.' });
+  }
+  if (creatorRole === 'MANAGER' && (dept !== creatorDept || !['SUPERVISOR', 'EMPLOYEE'].includes(role))) {
+    return res.status(403).json({ error: 'Managers can only add Supervisors or Employees to their own department.' });
+  }
 
   try {
-    const count = await prisma.employee.count();
-    const prefix = role === 'HR' ? 'HR' : role === 'MANAGER' ? 'MGR' : role === 'SUPERVISOR' ? 'SUP' : 'EMP';
-    const id = `${prefix}${String(count + 1).padStart(3, '0')}`;
-    const hashedPassword = await bcrypt.hash(password || 'password123', 10);
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = await prisma.employee.findUnique({ where: { email: cleanEmail } });
+    if (existing) {
+      return res.status(400).json({ error: 'An employee with this email already exists.' });
+    }
+
+    // Rule 3: Only 1 Manager per department
+    if (role === 'MANAGER') {
+      const existingManager = await prisma.employee.findFirst({
+        where: { dept, role: 'MANAGER' }
+      });
+      if (existingManager) {
+        return res.status(400).json({
+          error: `The ${dept} department already has a Manager (${existingManager.name}).`
+        });
+      }
+    }
+
+    const id = await generateEmployeeId(role);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const annual = Math.max(0, roundToOneDecimal(parseFloat(allowedAnnual ?? 14)));
+    const casual = Math.max(0, roundToOneDecimal(parseFloat(allowedCasual ?? 7)));
 
     const newEmp = await prisma.employee.create({
       data: {
         id,
-        name,
-        email: email ? email.trim().toLowerCase() : `${id.toLowerCase()}@company.com`,
+        name: name.trim(),
+        email: cleanEmail,
         password: hashedPassword,
-        role: role || 'EMPLOYEE',
+        role,
         dept,
         allowedAnnual: annual,
         remainingAnnual: annual,
@@ -162,10 +239,14 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-// 4. Update Remaining Leaves or Short Leaves
+// 5. Rule 6: HR ONLY can reduce/update remaining leave count
 app.patch('/api/employees/:id/remaining', async (req, res) => {
   const { id } = req.params;
-  const { remainingAnnual, remainingCasual, shortLeavesTaken } = req.body;
+  const { remainingAnnual, remainingCasual, shortLeavesTaken, requesterRole } = req.body;
+
+  if (requesterRole !== 'HR') {
+    return res.status(403).json({ error: 'Only HR is authorized to adjust remaining leave counts.' });
+  }
 
   const data = {};
   if (remainingAnnual !== undefined) data.remainingAnnual = roundToOneDecimal(parseFloat(remainingAnnual) || 0);
@@ -181,9 +262,15 @@ app.patch('/api/employees/:id/remaining', async (req, res) => {
   }
 });
 
-// 5. Quick Increment Short Leaves
+// 6. Rule 6: HR ONLY quick increment short leaves (+1)
 app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
   const { id } = req.params;
+  const { requesterRole } = req.body;
+
+  if (requesterRole !== 'HR') {
+    return res.status(403).json({ error: 'Only HR is authorized to increment short leaves.' });
+  }
+
   try {
     let emp = await prisma.employee.findUnique({ where: { id } });
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
@@ -200,7 +287,7 @@ app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
   }
 });
 
-// 6. Mark Daily Attendance
+// 7. Mark Daily Attendance
 app.post('/api/employees/:id/attendance', async (req, res) => {
   const { id } = req.params;
   try {
@@ -224,7 +311,9 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
   }
 });
 
-// 7. Submit Leave Request & Enforce Quotas
+// ================= LEAVE REQUEST & APPROVAL ROUTES =================
+
+// 8. Submit Leave Request (Creates PENDING request & notifies HR)
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
   const { type, days, reason } = req.body;
@@ -241,115 +330,167 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
     emp = await ensureDailyReset(emp);
     const selectedType = String(type).toLowerCase();
 
-    // Short Leave Evaluation
+    let leaveTypeName = 'Annual Leave';
+    let currentRemaining = emp.remainingAnnual;
+    let exceedsQuota = false;
+    let exceededBy = 0;
+
     if (selectedType.includes('short')) {
-      const currentTaken = emp.shortLeavesTaken;
-      const remainingShort = Math.max(0, roundToOneDecimal(MONTHLY_SHORT_LEAVE_LIMIT - currentTaken));
-
-      if (currentTaken + requestedAmount > MONTHLY_SHORT_LEAVE_LIMIT) {
-        const exceededBy = roundToOneDecimal((currentTaken + requestedAmount) - MONTHLY_SHORT_LEAVE_LIMIT);
-
-        const emailResult = await sendLeaveBreachEmail({
-          employee: emp,
-          leaveType: 'Short Leave (Monthly Limit: 2)',
-          requestedDays: requestedAmount,
-          currentRemaining: remainingShort,
-          exceededBy,
-          reason
-        });
-
-        const { password: _, ...empSafe } = emp;
-        return res.status(200).json({
-          exceeded: true,
-          employee: empSafe,
-          exceededBy,
-          requestedDays: requestedAmount,
-          leaveType: 'Short Leave',
-          remaining: remainingShort,
-          reason,
-          emailSent: emailResult.success
-        });
+      leaveTypeName = 'Short Leave';
+      currentRemaining = Math.max(0, roundToOneDecimal(MONTHLY_SHORT_LEAVE_LIMIT - emp.shortLeavesTaken));
+      if (emp.shortLeavesTaken + requestedAmount > MONTHLY_SHORT_LEAVE_LIMIT) {
+        exceedsQuota = true;
+        exceededBy = roundToOneDecimal((emp.shortLeavesTaken + requestedAmount) - MONTHLY_SHORT_LEAVE_LIMIT);
       }
-
-      const updated = await prisma.employee.update({
-        where: { id },
-        data: { shortLeavesTaken: roundToOneDecimal(currentTaken + requestedAmount) }
-      });
-      const { password: _, ...empSafe } = updated;
-      return res.json({ exceeded: false, employee: empSafe });
+    } else if (selectedType.includes('casual')) {
+      leaveTypeName = 'Casual Leave';
+      currentRemaining = emp.remainingCasual;
+      if (requestedAmount > currentRemaining) {
+        exceedsQuota = true;
+        exceededBy = roundToOneDecimal(requestedAmount - currentRemaining);
+      }
+    } else {
+      leaveTypeName = 'Annual Leave';
+      currentRemaining = emp.remainingAnnual;
+      if (requestedAmount > currentRemaining) {
+        exceedsQuota = true;
+        exceededBy = roundToOneDecimal(requestedAmount - currentRemaining);
+      }
     }
 
-    // Annual / Casual Leave Evaluation
-    const isAnnual = selectedType.includes('annual');
-    const remainingField = isAnnual ? 'remainingAnnual' : 'remainingCasual';
-    const leaveTypeName = isAnnual ? 'Annual Leave' : 'Casual Leave';
-    const currentRemaining = emp[remainingField];
-
-    if (requestedAmount > currentRemaining) {
-      const exceededBy = roundToOneDecimal(requestedAmount - currentRemaining);
-
-      const emailResult = await sendLeaveBreachEmail({
-        employee: emp,
+    // Save Leave Request to Database (Balance is NOT auto-deducted; only HR reduces leave count)
+    const leaveRequest = await prisma.leaveRequest.create({
+      data: {
+        employeeId: emp.id,
         leaveType: leaveTypeName,
-        requestedDays: requestedAmount,
-        currentRemaining,
-        exceededBy,
-        reason
-      });
-
-      const { password: _, ...empSafe } = emp;
-      return res.status(200).json({
-        exceeded: true,
-        employee: empSafe,
-        exceededBy,
-        requestedDays: requestedAmount,
-        leaveType: leaveTypeName,
-        remaining: currentRemaining,
-        reason,
-        emailSent: emailResult.success
-      });
-    }
-
-    const updated = await prisma.employee.update({
-      where: { id },
-      data: { [remainingField]: roundToOneDecimal(currentRemaining - requestedAmount) }
+        days: requestedAmount,
+        reason: reason || 'No reason provided',
+        status: 'PENDING',
+        exceedsQuota,
+        exceededBy
+      }
     });
-    const { password: _, ...empSafe } = updated;
-    return res.json({ exceeded: false, employee: empSafe });
+
+    // Notify HR via Email for every leave requested
+    const emailResult = await sendLeaveNotificationEmail({
+      eventType: 'LEAVE_REQUESTED',
+      employee: emp,
+      leaveType: leaveTypeName,
+      requestedDays: requestedAmount,
+      currentRemaining,
+      exceedsQuota,
+      exceededBy,
+      reason
+    });
+
+    const { password: _, ...empSafe } = emp;
+    return res.status(201).json({
+      request: leaveRequest,
+      exceeded: exceedsQuota,
+      employee: empSafe,
+      exceededBy,
+      requestedDays: requestedAmount,
+      leaveType: leaveTypeName,
+      remaining: currentRemaining,
+      reason,
+      emailSent: emailResult.success
+    });
   } catch (error) {
-    console.error('Leave processing error:', error);
-    return res.status(500).json({ error: 'Failed to process leave: ' + error.message });
+    console.error('Leave submission error:', error);
+    return res.status(500).json({ error: 'Failed to submit leave request: ' + error.message });
   }
 });
 
-// 8. Force Approve Leave Overdraft
-app.post('/api/employees/:id/force-approve', async (req, res) => {
-  const { id } = req.params;
-  const { type, days } = req.body;
+// 9. Get All Leave Requests (with Employee details)
+app.get('/api/leave-requests', async (req, res) => {
+  try {
+    const requests = await prisma.leaveRequest.findMany({
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            dept: true,
+            remainingAnnual: true,
+            remainingCasual: true,
+            shortLeavesTaken: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(requests);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch leave requests' });
+  }
+});
+
+// 10. Approve or Reject Leave Request (Supervisors, Managers, Admin) & Notify HR
+app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
+  const { reqId } = req.params;
+  const { status, approverName, approverRole, approverDept } = req.body; // status: 'APPROVED' | 'REJECTED'
+
+  if (!['APPROVED', 'REJECTED'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
 
   try {
-    const emp = await prisma.employee.findUnique({ where: { id } });
-    const selectedType = String(type).toLowerCase();
-    let updateData = {};
+    const leaveReq = await prisma.leaveRequest.findUnique({
+      where: { id: parseInt(reqId, 10) },
+      include: { employee: true }
+    });
 
-    if (selectedType.includes('short')) {
-      updateData = { shortLeavesTaken: roundToOneDecimal(emp.shortLeavesTaken + parseFloat(days)) };
-    } else if (selectedType.includes('annual')) {
-      updateData = { remainingAnnual: roundToOneDecimal(emp.remainingAnnual - parseFloat(days)) };
-    } else {
-      updateData = { remainingCasual: roundToOneDecimal(emp.remainingCasual - parseFloat(days)) };
+    if (!leaveReq) return res.status(404).json({ error: 'Leave request not found' });
+
+    // Permission check: Supervisors and Managers can only approve for their own department
+    if (['SUPERVISOR', 'MANAGER'].includes(approverRole)) {
+      if (leaveReq.employee.dept !== approverDept) {
+        return res.status(403).json({ error: 'You can only approve/reject leave requests for your own department.' });
+      }
+      if (approverRole === 'SUPERVISOR' && leaveReq.employee.role !== 'EMPLOYEE') {
+        return res.status(403).json({ error: 'Supervisors can only approve/reject requests from department Employees.' });
+      }
+    } else if (approverRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only Supervisors, Department Managers, or Admin can approve/reject requests.' });
     }
 
-    const updated = await prisma.employee.update({
-      where: { id },
-      data: updateData
+    const updatedReq = await prisma.leaveRequest.update({
+      where: { id: parseInt(reqId, 10) },
+      data: {
+        status,
+        approvedBy: `${approverName} (${approverRole})`
+      },
+      include: { employee: true }
     });
-    const { password: _, ...empSafe } = updated;
-    res.json({ success: true, employee: empSafe });
+
+    // Rule 6: Notify HR whenever a leave is approved so HR can reduce the remaining leave count
+    if (status === 'APPROVED') {
+      const emp = updatedReq.employee;
+      const currentRemaining =
+        updatedReq.leaveType === 'Annual Leave' ? emp.remainingAnnual :
+        updatedReq.leaveType === 'Casual Leave' ? emp.remainingCasual :
+        Math.max(0, 2 - emp.shortLeavesTaken);
+
+      await sendLeaveNotificationEmail({
+        eventType: 'LEAVE_APPROVED',
+        employee: emp,
+        leaveType: updatedReq.leaveType,
+        requestedDays: updatedReq.days,
+        currentRemaining,
+        exceedsQuota: updatedReq.exceedsQuota,
+        exceededBy: updatedReq.exceededBy,
+        reason: updatedReq.reason,
+        approvedBy: `${approverName} (${approverRole})`
+      });
+    }
+
+    res.json(updatedReq);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to apply exception' });
+    res.status(500).json({ error: 'Failed to update leave request status: ' + error.message });
   }
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`LeaveCore API Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`LeaveCore API running on port ${PORT}`));
