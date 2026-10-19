@@ -1,5 +1,14 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
+export const registerUser = async (userData) => {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData)
+  });
+  return res.json();
+};
+
 export const loginUser = async (credentials) => {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
@@ -32,9 +41,11 @@ export const updateRemainingLeaves = async (id, payload) => {
   return res.json();
 };
 
-export const incrementShortLeave = async (id) => {
+export const incrementShortLeave = async (id, requesterRole) => {
   const res = await fetch(`${API_BASE}/employees/${id}/increment-short-leave`, {
-    method: 'POST'
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requesterRole })
   });
   return res.json();
 };
@@ -55,11 +66,16 @@ export const requestLeave = async (id, data) => {
   return res.json();
 };
 
-export const forceApproveLeave = async (id, data) => {
-  const res = await fetch(`${API_BASE}/employees/${id}/force-approve`, {
-    method: 'POST',
+export const fetchLeaveRequests = async () => {
+  const res = await fetch(`${API_BASE}/leave-requests`);
+  return res.json();
+};
+
+export const updateLeaveRequestStatus = async (reqId, payload) => {
+  const res = await fetch(`${API_BASE}/leave-requests/${reqId}/status`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(payload)
   });
   return res.json();
 };
