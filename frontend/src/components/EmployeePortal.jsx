@@ -5,7 +5,7 @@ import { markAttendance, requestLeave } from '../api';
 export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, onRefresh, onBreachDetected }) {
   const currentEmp = employees.find((e) => e.id === selectedEmpId) || employees[0];
   const [leaveType, setLeaveType] = useState('annual');
-  const [days, setDays] = useState('');
+  const [days, setDays] = useState('1');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -23,26 +23,24 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
     const reqDays = parseFloat(days);
-    if (!reqDays || reqDays <= 0) return alert('Enter a valid amount (at least 0.5 days)');
+    if (!reqDays || reqDays <= 0) return alert('Enter a valid amount (at least 0.5 or 1)');
 
     setLoading(true);
     try {
       const res = await requestLeave(currentEmp.id, { type: leaveType, days: reqDays, reason });
 
-      // Check if backend returned an error
       if (res.error) {
         alert('Server Error: ' + res.error);
         return;
       }
 
-      // Check if leave exceeds quota -> Launch popup modal
       if (res.exceeded) {
         onBreachDetected(res);
-        setDays('');
+        setDays('1');
         setReason('');
       } else {
-        alert('Leave approved successfully!');
-        setDays('');
+        alert('Leave request approved successfully!');
+        setDays('1');
         setReason('');
         onRefresh();
       }
@@ -52,6 +50,8 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
       setLoading(false);
     }
   };
+
+  const remainingShortLeavesThisMonth = Math.max(0, 2 - (currentEmp.shortLeavesTaken || 0));
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -107,12 +107,14 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <div className="flex justify-between text-sm font-semibold text-slate-600">
-            Short Leaves Taken <span className="bg-purple-50 text-purple-600 p-2 rounded-lg"><Clock className="w-4 h-4"/></span>
+            Short Leaves (This Month) <span className="bg-purple-50 text-purple-600 p-2 rounded-lg"><Clock className="w-4 h-4"/></span>
           </div>
           <div className="mt-3 text-3xl font-bold text-purple-700">
-            {currentEmp.shortLeavesTaken ?? 0} <span className="text-sm text-slate-500 font-medium">taken</span>
+            {currentEmp.shortLeavesTaken ?? 0} / 2 <span className="text-sm text-slate-500 font-medium">taken</span>
           </div>
-          <div className="text-xs text-slate-400 mt-1">Logged directly by HR</div>
+          <div className="text-xs text-slate-400 mt-1">
+            {remainingShortLeavesThisMonth} remaining before quota breach
+          </div>
         </div>
       </div>
 
@@ -120,7 +122,7 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h3 className="text-lg font-bold text-slate-900 mb-1">Apply for Leave</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Submissions exceeding your remaining quota will trigger an instant alert popup and dispatch email notifications to HR and Admin.
+          Submissions exceeding your available allowance (including the 2 short leaves/month policy) will trigger an instant alert popup and dispatch email notifications to HR and Admin.
         </p>
         <form onSubmit={handleLeaveSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -133,15 +135,18 @@ export default function EmployeePortal({ employees, selectedEmpId, onSelectEmp, 
               >
                 <option value="annual">Annual Leave</option>
                 <option value="casual">Casual Leave</option>
+                <option value="short">Short Leave (Max 2 / month)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Days Requested</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                {leaveType === 'short' ? 'Count Requested' : 'Days Requested'}
+              </label>
               <input
                 type="number"
-                min="0.5"
-                step="0.5"
-                placeholder="e.g. 1 or 0.5"
+                min={leaveType === 'short' ? '1' : '0.5'}
+                step={leaveType === 'short' ? '1' : '0.5'}
+                placeholder={leaveType === 'short' ? 'e.g. 1' : 'e.g. 1 or 0.5'}
                 value={days}
                 onChange={(e) => setDays(e.target.value)}
                 required
