@@ -63,10 +63,11 @@ const ensureDailyReset = async (emp) => {
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password, role, dept, allowedAnnual, allowedCasual } = req.body;
 
-  if (!name || !email || !password || !role || !dept) {
-    return res.status(400).json({ error: 'All fields (Name, Email, Password, Role, Department) are required.' });
+  if (role === 'EMPLOYEE') {
+    return res.status(403).json({ error: 'Employees cannot self-register. Please ask your Supervisor, Manager, or HR to create your account.' });
   }
 
+  
   try {
     const cleanEmail = email.trim().toLowerCase();
     const existingEmail = await prisma.employee.findUnique({ where: { email: cleanEmail } });
