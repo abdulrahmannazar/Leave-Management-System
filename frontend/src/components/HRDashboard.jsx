@@ -9,7 +9,6 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
   const isHR = currentUser.role === 'HR';
   const isAdminOrHR = ['ADMIN', 'HR'].includes(currentUser.role);
 
-  // Filter employees based on hierarchy & department rules
   const visibleEmployees = employees.filter((emp) => {
     if (isAdminOrHR) {
       if (selectedDeptFilter !== 'ALL' && emp.dept !== selectedDeptFilter) return false;
@@ -45,25 +44,25 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
             {isAdminOrHR ? 'Company-Wide Staff & Leave Records' : `${currentUser.dept} Department Staff Records`}
           </h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {isHR
               ? 'HR Exclusive: You can manually reduce remaining leave counts and increment short leaves.'
               : 'Read-Only View: Only HR is authorized to reduce remaining leave counts.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
           {isAdminOrHR && (
             <select
               value={selectedDeptFilter}
               onChange={(e) => setSelectedDeptFilter(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
+              className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#1178a4] focus:outline-none w-full sm:w-auto"
             >
               <option value="ALL">All Departments</option>
               <option value="Audit">Audit</option>
@@ -77,9 +76,9 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
           {['HR', 'MANAGER', 'SUPERVISOR', 'ADMIN'].includes(currentUser.role) && (
             <button
               onClick={onOpenAddModal}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1178a4] hover:bg-[#0e6388] text-white text-sm font-semibold rounded-lg shadow-sm transition"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#1178a4] hover:bg-[#0e6388] text-white text-sm font-semibold rounded-lg shadow-sm transition w-full sm:w-auto whitespace-nowrap"
             >
-              <UserPlus className="w-4 h-4" /> Add Staff Credentials
+              <UserPlus className="w-4 h-4 shrink-0" /> Add Staff Credentials
             </button>
           )}
         </div>
@@ -87,17 +86,17 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                <th className="px-5 py-3.5">Staff Member</th>
-                <th className="px-4 py-3.5">Role & Dept</th>
-                <th className="px-4 py-3.5 text-center">Allowed Annual</th>
-                <th className="px-4 py-3.5 text-center">Remaining Annual</th>
-                <th className="px-4 py-3.5 text-center">Allowed Casual</th>
-                <th className="px-4 py-3.5 text-center">Remaining Casual</th>
-                <th className="px-5 py-3.5 text-center">Short Leaves Taken</th>
-                <th className="px-5 py-3.5 text-center">Today's Attendance</th>
+                <th className="px-4 sm:px-5 py-3.5 whitespace-nowrap">Staff Member</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Role & Dept</th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">Allowed Annual</th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">Remaining Annual</th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">Allowed Casual</th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">Remaining Casual</th>
+                <th className="px-4 sm:px-5 py-3.5 text-center whitespace-nowrap">Short Leaves Taken</th>
+                <th className="px-4 sm:px-5 py-3.5 text-center whitespace-nowrap">Today's Attendance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -126,12 +125,12 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
 
                   return (
                     <tr key={emp.id} className="hover:bg-slate-50 transition">
-                      <td className="px-5 py-4">
+                      <td className="px-4 sm:px-5 py-4 whitespace-nowrap">
                         <div className="font-semibold text-slate-900">{emp.name}</div>
                         <div className="text-xs text-slate-500">{emp.email} &bull; {emp.id}</div>
                       </td>
 
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
                           emp.role === 'MANAGER' ? 'bg-emerald-100 text-emerald-800' :
                           emp.role === 'SUPERVISOR' ? 'bg-amber-100 text-amber-800' :
@@ -142,19 +141,19 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                           {emp.role}
                         </span>
                         <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                          <Building2 className="w-3 h-3" /> {emp.dept}
+                          <Building2 className="w-3 h-3 shrink-0" /> {emp.dept}
                         </div>
                       </td>
 
                       {/* Allowed Annual (Locked) */}
-                      <td className="px-4 py-4 text-center">
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-[#1178a4] border border-sky-200">
-                          <Lock className="w-3 h-3" /> {emp.allowedAnnual}
+                          <Lock className="w-3 h-3 shrink-0" /> {emp.allowedAnnual}
                         </span>
                       </td>
 
                       {/* Remaining Annual (Editable ONLY by HR) */}
-                      <td className="px-4 py-4 text-center">
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
                         {isHR ? (
                           <input
                             type="number"
@@ -174,14 +173,14 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                       </td>
 
                       {/* Allowed Casual (Locked) */}
-                      <td className="px-4 py-4 text-center">
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                          <Lock className="w-3 h-3" /> {emp.allowedCasual}
+                          <Lock className="w-3 h-3 shrink-0" /> {emp.allowedCasual}
                         </span>
                       </td>
 
                       {/* Remaining Casual (Editable ONLY by HR) */}
-                      <td className="px-4 py-4 text-center">
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
                         {isHR ? (
                           <input
                             type="number"
@@ -201,7 +200,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                       </td>
 
                       {/* Short Leaves Taken (Editable ONLY by HR) */}
-                      <td className="px-5 py-4 text-center">
+                      <td className="px-4 sm:px-5 py-4 text-center whitespace-nowrap">
                         {isHR ? (
                           <div className="inline-flex items-center gap-2">
                             <input
@@ -230,7 +229,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                       </td>
 
                       {/* Attendance */}
-                      <td className="px-5 py-4 text-center">
+                      <td className="px-4 sm:px-5 py-4 text-center whitespace-nowrap">
                         {emp.presentToday ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                             <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Present ({emp.presentTime})

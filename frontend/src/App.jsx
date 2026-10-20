@@ -57,58 +57,73 @@ export default function App() {
   const isManagement = ['ADMIN', 'HR', 'MANAGER', 'SUPERVISOR'].includes(currentUser.role);
 
   return (
-    <div className="bg-slate-100 min-h-screen text-slate-800 pb-12 font-sans">
+    <div className="bg-slate-100 min-h-screen text-slate-800 pb-12 font-sans overflow-x-hidden">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 md:py-0 md:h-16 flex flex-wrap items-center justify-between gap-3">
+          {/* Brand Logo & Title */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
             <img
               src="/logo.png"
               alt="Frontier Advisory Logo"
-              className="h-12 w-auto object-contain"
+              className="h-9 sm:h-12 w-auto object-contain shrink-0"
             />
             <div>
-              <h1 className="font-bold text-[#1178a4] leading-none text-lg">Leave Management System</h1>
-              <p className="text-xs text-slate-500 mt-0.5">{currentUser.dept} Department</p>
+              <h1 className="font-bold text-[#1178a4] leading-tight text-sm sm:text-lg">
+                Leave Management System
+              </h1>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                {currentUser.dept} Department
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          {/* Right Controls & Navigation */}
+          <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-4 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
             {isManagement && (
-              <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <div className="flex flex-1 md:flex-initial gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto">
                 <button
                   onClick={() => setView('records')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    view === 'records' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'records'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5" />
-                  Staff Records
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span>Staff Records</span>
                 </button>
                 <button
                   onClick={() => setView('approvals')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    view === 'approvals' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'approvals'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <ClipboardCheck className="w-3.5 h-3.5" />
-                  Leave Approvals
+                  <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Leave Approvals</span>
                 </button>
                 <button
                   onClick={() => setView('portal')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    view === 'portal' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'portal'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  My Portal
+                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>My Portal</span>
                 </button>
               </div>
             )}
 
-            <div className="flex items-center gap-3 border-l pl-4 border-slate-200">
+            {/* User Profile & Logout */}
+            <div className={`flex items-center gap-2 sm:gap-3 ${isManagement ? 'border-l pl-2 sm:pl-4 border-slate-200' : 'ml-auto'}`}>
               <div className="text-right">
-                <div className="text-xs font-bold text-slate-900 leading-tight">{currentUser.name}</div>
-                <span className="inline-block px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold uppercase bg-sky-50 text-[#1178a4] border border-sky-200">
+                <div className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[110px] sm:max-w-none">
+                  {currentUser.name}
+                </div>
+                <span className="inline-block px-2 py-0.5 mt-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase bg-sky-50 text-[#1178a4] border border-sky-200 whitespace-nowrap">
                   {currentUser.role} &bull; {currentUser.dept}
                 </span>
               </div>
@@ -116,7 +131,7 @@ export default function App() {
               <button
                 onClick={handleLogout}
                 title="Log out"
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -125,7 +140,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 mt-8">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 mt-5 sm:mt-8">
         {view === 'records' && isManagement ? (
           <HRDashboard
             currentUser={currentUser}
