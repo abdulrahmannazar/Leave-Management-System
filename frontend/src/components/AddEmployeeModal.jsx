@@ -69,10 +69,12 @@ export default function AddEmployeeModal({ currentUser, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
-          <h3 className="font-bold text-slate-900">Add Staff Credentials</h3>
-          <button onClick={onClose}><X className="w-5 h-5 text-slate-400 hover:text-slate-600" /></button>
+      <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <h3 className="font-bold text-[#1178a4]">Add Staff Credentials</h3>
+          <button onClick={onClose} type="button">
+            <X className="w-5 h-5 text-slate-400 hover:text-slate-600 transition" />
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -83,78 +85,98 @@ export default function AddEmployeeModal({ currentUser, onClose, onSuccess }) {
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Full Name</label>
+            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+              Full Name
+            </label>
             <input
               type="text"
               required
               placeholder="Staff Full Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Login Email</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Login Email
+              </label>
               <input
                 type="email"
                 required
                 placeholder="staff@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Login Password</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Login Password
+              </label>
               <input
                 type="text"
                 required
                 placeholder="Initial password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Role</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Role
+              </label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               >
                 {availableRoles().map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Department</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Department
+              </label>
               <select
                 value={isDeptLocked ? currentUser.dept : dept}
                 disabled={isDeptLocked}
                 onChange={(e) => setDept(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50 disabled:opacity-60"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50 disabled:opacity-60 focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               >
                 {DEPARTMENTS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 space-y-1">
-            <p className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Onboarding Quota</p>
-            <p>Allowed Annual & Casual quotas are fixed upon creation. Only HR can reduce remaining balances later.</p>
+          <div className="p-3 bg-sky-50 rounded-xl border border-sky-200 text-xs text-[#0e6388] space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4" /> Onboarding Quota
+            </p>
+            <p>
+              Allowed Annual & Casual quotas are fixed upon creation. Only HR can reduce remaining balances later.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Allowed Annual</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Allowed Annual
+              </label>
               <input
                 type="number"
                 min="0"
@@ -162,11 +184,13 @@ export default function AddEmployeeModal({ currentUser, onClose, onSuccess }) {
                 required
                 value={annual}
                 onChange={(e) => setAnnual(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Allowed Casual</label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Allowed Casual
+              </label>
               <input
                 type="number"
                 min="0"
@@ -174,17 +198,23 @@ export default function AddEmployeeModal({ currentUser, onClose, onSuccess }) {
                 required
                 value={casual}
                 onChange={(e) => setCasual(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               />
             </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50"
+              className="px-4 py-2 bg-[#1178a4] hover:bg-[#0e6388] text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50"
             >
               {loading ? 'Saving...' : 'Create Credentials'}
             </button>

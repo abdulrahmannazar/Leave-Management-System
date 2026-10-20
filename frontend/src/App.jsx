@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Users, UserCheck, ClipboardCheck, LogOut } from 'lucide-react';
+import { Users, UserCheck, ClipboardCheck, LogOut } from 'lucide-react';
 import { fetchEmployees, fetchLeaveRequests } from './api';
 import LoginPage from './components/LoginPage';
 import HRDashboard from './components/HRDashboard';
@@ -61,14 +61,15 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-100">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="Frontier Advisory Logo"
+              className="h-12 w-auto object-contain"
+            />
             <div>
-              <h1 className="font-bold text-slate-900 leading-none">Leave management system</h1>
+              <h1 className="font-bold text-[#1178a4] leading-none text-lg">Leave Management System</h1>
               <p className="text-xs text-slate-500 mt-0.5">{currentUser.dept} Department</p>
             </div>
-            
           </div>
 
           <div className="flex items-center gap-4">
@@ -77,7 +78,7 @@ export default function App() {
                 <button
                   onClick={() => setView('records')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    view === 'records' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    view === 'records' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <Users className="w-3.5 h-3.5" />
@@ -86,7 +87,7 @@ export default function App() {
                 <button
                   onClick={() => setView('approvals')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    view === 'approvals' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    view === 'approvals' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <ClipboardCheck className="w-3.5 h-3.5" />
@@ -95,7 +96,7 @@ export default function App() {
                 <button
                   onClick={() => setView('portal')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    view === 'portal' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    view === 'portal' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <UserCheck className="w-3.5 h-3.5" />
@@ -107,7 +108,7 @@ export default function App() {
             <div className="flex items-center gap-3 border-l pl-4 border-slate-200">
               <div className="text-right">
                 <div className="text-xs font-bold text-slate-900 leading-tight">{currentUser.name}</div>
-                <span className="inline-block px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <span className="inline-block px-2 py-0.5 mt-0.5 rounded-full text-[10px] font-bold uppercase bg-sky-50 text-[#1178a4] border border-sky-200">
                   {currentUser.role} &bull; {currentUser.dept}
                 </span>
               </div>

@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Lock, Mail, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Lock, Mail, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { loginUser, registerUser } from '../api';
 
 const DEPARTMENTS = ['Audit', 'Tax', 'Secretarial', 'HR', 'Accounting'];
 
-// Removed EMPLOYEE from self-registration (Employees are added by HR, Managers, or Supervisors)
 const ROLES = [
   { value: 'SUPERVISOR', label: 'Supervisor' },
   { value: 'MANAGER', label: 'Department Manager (Max 1 per Dept)' },
@@ -83,14 +82,16 @@ export default function LoginPage({ onLoginSuccess }) {
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-            <ShieldCheck className="w-8 h-8" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="Frontier Advisory Logo"
+            className="h-24 w-auto object-contain bg-white p-2 rounded-2xl shadow-sm border border-slate-200"
+          />
         </div>
-        <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900">
-          Leave Management System Portal
+        <h2 className="mt-4 text-center text-2xl font-extrabold text-[#1178a4]">
+          Leave Management System
         </h2>
-        <p className="mt-1 text-center text-sm text-slate-600">
+        <p className="mt-1 text-center text-sm text-slate-500">
           Departmental Leave & Attendance Management
         </p>
       </div>
@@ -104,7 +105,7 @@ export default function LoginPage({ onLoginSuccess }) {
               type="button"
               onClick={() => { setMode('login'); setError(''); }}
               className={`py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition ${
-                mode === 'login' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                mode === 'login' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Sign In
@@ -113,7 +114,7 @@ export default function LoginPage({ onLoginSuccess }) {
               type="button"
               onClick={() => { setMode('register'); setError(''); }}
               className={`py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition ${
-                mode === 'register' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                mode === 'register' ? 'bg-white text-[#1178a4] shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Management Register
@@ -143,7 +144,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     placeholder="Enter your email or ID"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   />
                 </div>
               </div>
@@ -162,7 +163,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   />
                   <button
                     type="button"
@@ -177,7 +178,7 @@ export default function LoginPage({ onLoginSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition disabled:opacity-50"
+                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-semibold text-white bg-[#1178a4] hover:bg-[#0e6388] transition disabled:opacity-50"
               >
                 {loading ? 'Signing in...' : 'Sign In'}
                 <ArrowRight className="w-4 h-4" />
@@ -186,7 +187,7 @@ export default function LoginPage({ onLoginSuccess }) {
           ) : (
             /* ==================== REGISTER FORM ==================== */
             <form className="space-y-4" onSubmit={handleRegister}>
-              <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-[11px] text-indigo-800">
+              <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-lg text-[11px] text-[#0e6388]">
                 <strong>Note:</strong> Employee accounts are created by HR, Department Managers, or Supervisors inside the portal.
               </div>
 
@@ -204,7 +205,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     placeholder="John Doe"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   />
                 </div>
               </div>
@@ -223,7 +224,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     placeholder="john@company.com"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   />
                 </div>
               </div>
@@ -242,7 +243,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     placeholder="Create a password"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    className="block w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   />
                   <button
                     type="button"
@@ -265,7 +266,7 @@ export default function LoginPage({ onLoginSuccess }) {
                       setRegRole(e.target.value);
                       if (e.target.value === 'HR') setRegDept('HR');
                     }}
-                    className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   >
                     {ROLES.map((r) => (
                       <option key={r.value} value={r.value}>{r.label}</option>
@@ -280,7 +281,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   <select
                     value={regDept}
                     onChange={(e) => setRegDept(e.target.value)}
-                    className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-600"
+                    className="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                   >
                     {DEPARTMENTS.map((d) => (
                       <option key={d} value={d}>{d}</option>
@@ -323,7 +324,7 @@ export default function LoginPage({ onLoginSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition disabled:opacity-50 mt-2"
+                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-semibold text-white bg-[#1178a4] hover:bg-[#0e6388] transition disabled:opacity-50 mt-2"
               >
                 {loading ? 'Creating Account...' : 'Register & Sign In'}
                 <ArrowRight className="w-4 h-4" />

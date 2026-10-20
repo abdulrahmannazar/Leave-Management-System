@@ -16,11 +16,9 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
       return true;
     }
     if (currentUser.role === 'MANAGER') {
-      // Manager sees Supervisors and Employees in their own department
       return emp.dept === currentUser.dept && ['MANAGER', 'SUPERVISOR', 'EMPLOYEE'].includes(emp.role);
     }
     if (currentUser.role === 'SUPERVISOR') {
-      // Supervisor sees Employees (and themselves) in their own department
       return emp.dept === currentUser.dept && ['SUPERVISOR', 'EMPLOYEE'].includes(emp.role);
     }
     return emp.id === currentUser.id;
@@ -65,7 +63,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
             <select
               value={selectedDeptFilter}
               onChange={(e) => setSelectedDeptFilter(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium"
+              className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
             >
               <option value="ALL">All Departments</option>
               <option value="Audit">Audit</option>
@@ -79,7 +77,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
           {['HR', 'MANAGER', 'SUPERVISOR', 'ADMIN'].includes(currentUser.role) && (
             <button
               onClick={onOpenAddModal}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm transition"
+              className="flex items-center gap-2 px-4 py-2 bg-[#1178a4] hover:bg-[#0e6388] text-white text-sm font-semibold rounded-lg shadow-sm transition"
             >
               <UserPlus className="w-4 h-4" /> Add Staff Credentials
             </button>
@@ -137,7 +135,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                         <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
                           emp.role === 'MANAGER' ? 'bg-emerald-100 text-emerald-800' :
                           emp.role === 'SUPERVISOR' ? 'bg-amber-100 text-amber-800' :
-                          emp.role === 'HR' ? 'bg-indigo-100 text-indigo-800' :
+                          emp.role === 'HR' ? 'bg-sky-100 text-[#1178a4]' :
                           emp.role === 'ADMIN' ? 'bg-slate-800 text-white' :
                           'bg-slate-100 text-slate-700'
                         }`}>
@@ -150,7 +148,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
 
                       {/* Allowed Annual (Locked) */}
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-[#1178a4] border border-sky-200">
                           <Lock className="w-3 h-3" /> {emp.allowedAnnual}
                         </span>
                       </td>
@@ -164,7 +162,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                             value={annualVal}
                             onChange={(e) => handleInputChange(emp.id, 'remainingAnnual', e.target.value)}
                             onBlur={(e) => handleBlur(emp.id, 'remainingAnnual', e.target.value)}
-                            className={`w-20 px-2.5 py-1 text-center font-bold text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                            className={`w-20 px-2.5 py-1 text-center font-bold text-sm border rounded-lg focus:ring-2 focus:ring-[#1178a4] focus:outline-none ${
                               Number(annualVal) <= 0 ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white border-slate-300'
                             }`}
                           />
@@ -191,7 +189,7 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                             value={casualVal}
                             onChange={(e) => handleInputChange(emp.id, 'remainingCasual', e.target.value)}
                             onBlur={(e) => handleBlur(emp.id, 'remainingCasual', e.target.value)}
-                            className={`w-20 px-2.5 py-1 text-center font-bold text-sm border rounded-lg focus:ring-2 focus:ring-amber-500 ${
+                            className={`w-20 px-2.5 py-1 text-center font-bold text-sm border rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none ${
                               Number(casualVal) <= 0 ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white border-slate-300'
                             }`}
                           />
@@ -213,19 +211,19 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
                               value={shortVal}
                               onChange={(e) => handleInputChange(emp.id, 'shortLeavesTaken', e.target.value)}
                               onBlur={(e) => handleBlur(emp.id, 'shortLeavesTaken', e.target.value)}
-                              className="w-16 px-2 py-1 text-center font-bold text-sm border border-purple-200 bg-purple-50 text-purple-800 rounded-lg"
+                              className="w-16 px-2 py-1 text-center font-bold text-sm border border-sky-200 bg-sky-50 text-[#1178a4] rounded-lg focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
                             />
                             <button
                               type="button"
                               onClick={() => handleIncrement(emp.id)}
                               title="HR Only: Add +1 Short Leave"
-                              className="p-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-sm"
+                              className="p-1.5 bg-[#1178a4] hover:bg-[#0e6388] text-white rounded-lg shadow-sm"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
-                          <span className="font-bold text-sm text-purple-700 bg-purple-50 px-3 py-1 rounded-lg border border-purple-200">
+                          <span className="font-bold text-sm text-[#1178a4] bg-sky-50 px-3 py-1 rounded-lg border border-sky-200">
                             {emp.shortLeavesTaken} / 2
                           </span>
                         )}

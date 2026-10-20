@@ -88,7 +88,7 @@ export default function EmployeePortal({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <div className="flex justify-between text-sm font-semibold text-slate-600">
-            Annual Leaves <span className="bg-indigo-50 text-indigo-600 p-2 rounded-lg"><Calendar className="w-4 h-4"/></span>
+            Annual Leaves <span className="bg-sky-50 text-[#1178a4] p-2 rounded-lg"><Calendar className="w-4 h-4"/></span>
           </div>
           <div className="mt-3 text-3xl font-bold text-slate-900">
             {currentEmp.remainingAnnual} <span className="text-sm text-slate-500 font-medium">remaining</span>
@@ -108,9 +108,9 @@ export default function EmployeePortal({
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <div className="flex justify-between text-sm font-semibold text-slate-600">
-            Short Leaves (This Month) <span className="bg-purple-50 text-purple-600 p-2 rounded-lg"><Clock className="w-4 h-4"/></span>
+            Short Leaves (This Month) <span className="bg-slate-100 text-slate-600 p-2 rounded-lg"><Clock className="w-4 h-4"/></span>
           </div>
-          <div className="mt-3 text-3xl font-bold text-purple-700">
+          <div className="mt-3 text-3xl font-bold text-[#1178a4]">
             {currentEmp.shortLeavesTaken ?? 0} / 2 <span className="text-sm text-slate-500 font-medium">taken</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">
@@ -132,7 +132,7 @@ export default function EmployeePortal({
               <select
                 value={leaveType}
                 onChange={(e) => setLeaveType(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               >
                 <option value="annual">Annual Leave</option>
                 <option value="casual">Casual Leave</option>
@@ -150,7 +150,7 @@ export default function EmployeePortal({
                 value={days}
                 onChange={(e) => setDays(e.target.value)}
                 required
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
               />
             </div>
           </div>
@@ -162,13 +162,13 @@ export default function EmployeePortal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               required
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-sm transition shadow-sm disabled:opacity-50"
+            className="w-full py-2.5 bg-[#1178a4] hover:bg-[#0e6388] text-white font-semibold rounded-lg text-sm transition shadow-sm disabled:opacity-50"
           >
             {loading ? 'Submitting...' : 'Submit Leave Request'}
           </button>
@@ -212,7 +212,7 @@ export default function EmployeePortal({
                     <td className="px-5 py-3.5 font-semibold text-sm text-slate-900">
                       {req.leaveType}
                     </td>
-                    <td className="px-5 py-3.5 text-sm font-bold text-indigo-600">
+                    <td className="px-5 py-3.5 text-sm font-bold text-[#1178a4]">
                       {req.days} {req.leaveType === 'Short Leave' ? 'Count' : 'Days'}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-slate-600 max-w-xs">
