@@ -1,8 +1,23 @@
-import React from 'react';
-import { CheckCircle2, XCircle, Clock, AlertTriangle, Building2 } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Building2,
+  X,
+  User,
+  Mail,
+  Calendar,
+  FileText,
+  Eye
+} from 'lucide-react';
 import { updateLeaveRequestStatus } from '../api';
 
 export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, onShowDialog }) {
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [submittingId, setSubmittingId] = useState(null);
+
   const isAdminOrHR = ['ADMIN', 'HR'].includes(currentUser.role);
 
   const visibleRequests = leaveRequests.filter((req) => {
@@ -11,18 +26,28 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
   });
 
   const canApproveRequest = (req) => {
-    if (req.status !== 'PENDING') return false;
+    if (!req || req.status !== 'PENDING') return false;
     if (currentUser.role === 'ADMIN') return true;
-    if (currentUser.role === 'MANAGER' && req.employee?.dept === currentUser.dept && ['SUPERVISOR', 'EMPLOYEE'].includes(req.employee?.role)) {
+    if (
+      currentUser.role === 'MANAGER' &&
+      req.employee?.dept === currentUser.dept &&
+      ['SUPERVISOR', 'EMPLOYEE'].includes(req.employee?.role)
+    ) {
       return true;
     }
-    if (currentUser.role === 'SUPERVISOR' && req.employee?.dept === currentUser.dept && req.employee?.role === 'EMPLOYEE') {
+    if (
+      currentUser.role === 'SUPERVISOR' &&
+      req.employee?.dept === currentUser.dept &&
+      req.employee?.role === 'EMPLOYEE'
+    ) {
       return true;
     }
     return false;
   };
 
-  const handleDecision = async (reqId, status) => {
+  const handleDecision = async (reqId, status, e) => {
+    if (e) e.stopPropagation();
+    setSubmittingId(reqId);
     try {
       const res = await updateLeaveRequestStatus(reqId, {
         status,
@@ -30,27 +55,51 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
         approverRole: currentUser.role,
         approverDept: currentUser.dept
       });
+
       if (res.error) {
-        onShowDialog({
-          type: 'error',
-          title: 'Action Denied',
-          message: res.error
-        });
+        if (onShowDialog) {
+          onShowDialog({
+            type: 'error',
+            title: 'Action Denied',
+            message: res.error
+          });
+        } else {
+          alert(res.error);
+        }
       } else {
-        onShowDialog({
-          type: 'success',
-          title: status === 'APPROVED' ? 'Leave Request Approved' : 'Leave Request Rejected',
-          message: `Leave request ${status.toLowerCase()}! HR has been notified.`
-        });
+        if (selectedRequest && selectedRequest.id === reqId) {
+          setSelectedRequest(res);
+        }
+        if (onShowDialog) {
+          onShowDialog({
+            type: 'success',
+            title: status === 'APPROVED' ? 'Leave Request Approved' : 'Leave Request Rejected',
+            message: `Leave request ${status.toLowerCase()}! HR has been notified.`
+          });
+        } else {
+          alert(`Leave request ${status.toLowerCase()}! HR has been notified.`);
+        }
         onRefresh();
       }
     } catch (err) {
-      onShowDialog({
-        type: 'error',
-        title: 'Update Failed',
-        message: 'Failed to update request status.'
-      });
+      if (onShowDialog) {
+        onShowDialog({
+          type: 'error',
+          title: 'Update Failed',
+          message: 'Failed to update request status.'
+        });
+      } else {
+        alert('Failed to update request status');
+      }
+    } finally {
+      setSubmittingId(null);
     }
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    const d = new Date(dateString);
+    return `${d.toLocaleDateString()} at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   };
 
   return (
@@ -60,7 +109,7 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
           {isAdminOrHR ? 'All Company Leave Requests & Approvals' : `${currentUser.dept} Department Leave Approvals`}
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Supervisors and Department Managers approve department leave requests. HR and Admin view all requests across departments.
+          Click on any leave request row to view full employee and quota details. Supervisors and Department Managers approve department requests.
         </p>
       </div>
 
@@ -87,9 +136,16 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                 </tr>
               ) : (
                 visibleRequests.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50 transition">
+                  <tr
+                    key={req.id}
+                    onClick={() => setSelectedRequest(req)}
+                    className="hover:bg-sky-50/60 cursor-pointer transition group"
+                  >
                     <td className="px-4 sm:px-5 py-4 whitespace-nowrap">
-                      <div className="font-semibold text-slate-900">{req.employee?.name}</div>
+                      <div className="font-semibold text-slate-900 group-hover:text-[#1178a4] transition flex items-center gap-1.5">
+                        <span>{req.employee?.name}</span>
+                        <Eye className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                      </div>
                       <div className="text-xs text-slate-500">{req.employeeId}</div>
                     </td>
 
@@ -107,7 +163,7 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                       </div>
                     </td>
 
-                    <td className="px-4 py-4 text-sm text-slate-600 min-w-[160px] max-w-xs break-words">
+                    <td className="px-4 py-4 text-sm text-slate-600 min-w-[160px] max-w-xs truncate">
                       {req.reason}
                     </td>
 
@@ -147,18 +203,25 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                       )}
                     </td>
 
-                    <td className="px-4 sm:px-5 py-4 text-center whitespace-nowrap">
+                    <td
+                      className="px-4 sm:px-5 py-4 text-center whitespace-nowrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {canApproveRequest(req) ? (
                         <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => handleDecision(req.id, 'APPROVED')}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+                            type="button"
+                            disabled={submittingId === req.id}
+                            onClick={(e) => handleDecision(req.id, 'APPROVED', e)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition disabled:opacity-50"
                           >
                             Approve
                           </button>
                           <button
-                            onClick={() => handleDecision(req.id, 'REJECTED')}
-                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+                            type="button"
+                            disabled={submittingId === req.id}
+                            onClick={(e) => handleDecision(req.id, 'REJECTED', e)}
+                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-sm transition disabled:opacity-50"
                           >
                             Reject
                           </button>
@@ -176,6 +239,227 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
           </table>
         </div>
       </div>
+
+      {/* ==================== DETAILED LEAVE REQUEST MODAL ==================== */}
+      {selectedRequest && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setSelectedRequest(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-[#1178a4] px-5 sm:px-6 py-4 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base sm:text-lg leading-tight">
+                    Leave Request Details
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-sky-100 mt-0.5">
+                    Request #{selectedRequest.id} &bull; Submitted {formatDateTime(selectedRequest.createdAt)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="text-white/80 hover:text-white p-1 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
+              {/* Status & Quota Banner */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase">Status:</span>
+                  {selectedRequest.status === 'PENDING' && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                      <Clock className="w-3.5 h-3.5" /> Pending Approval
+                    </span>
+                  )}
+                  {selectedRequest.status === 'APPROVED' && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Approved
+                    </span>
+                  )}
+                  {selectedRequest.status === 'REJECTED' && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                      <XCircle className="w-3.5 h-3.5" /> Rejected
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  {selectedRequest.exceedsQuota ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                      <AlertTriangle className="w-3.5 h-3.5" /> Exceeds Quota by {selectedRequest.exceededBy}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Within Allowed Quota
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Employee Information Section */}
+              <div className="space-y-2.5">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Staff Information
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-slate-200 bg-white">
+                  <div className="flex items-start gap-2.5">
+                    <User className="w-4 h-4 text-[#1178a4] mt-0.5 shrink-0" />
+                    <div>
+                      <div className="text-xs text-slate-500">Full Name & ID</div>
+                      <div className="text-sm font-bold text-slate-900">
+                        {selectedRequest.employee?.name}
+                      </div>
+                      <div className="text-xs font-medium text-slate-500">
+                        {selectedRequest.employeeId}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <Building2 className="w-4 h-4 text-[#1178a4] mt-0.5 shrink-0" />
+                    <div>
+                      <div className="text-xs text-slate-500">Department & Role</div>
+                      <div className="text-sm font-bold text-slate-900">
+                        {selectedRequest.employee?.dept}
+                      </div>
+                      <span className="inline-block px-2 py-0.5 mt-0.5 rounded text-[10px] font-bold uppercase bg-sky-50 text-[#1178a4] border border-sky-200">
+                        {selectedRequest.employee?.role}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedRequest.employee?.email && (
+                    <div className="flex items-start gap-2.5 sm:col-span-2 pt-2 border-t border-slate-100">
+                      <Mail className="w-4 h-4 text-[#1178a4] mt-0.5 shrink-0" />
+                      <div>
+                        <div className="text-xs text-slate-500">Email Address</div>
+                        <div className="text-xs font-semibold text-slate-800 break-all">
+                          {selectedRequest.employee.email}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Leave Application Breakdown */}
+              <div className="space-y-2.5">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Leave Application Details
+                </h4>
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-xs text-slate-500">Leave Category</div>
+                      <div className="text-sm font-bold text-slate-900 mt-0.5 flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-[#1178a4] shrink-0" />
+                        <span>{selectedRequest.leaveType}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Requested Duration</div>
+                      <div className="text-sm font-extrabold text-[#1178a4] mt-0.5">
+                        {selectedRequest.days} {selectedRequest.leaveType === 'Short Leave' ? 'Short Leave(s)' : 'Day(s)'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-200/80">
+                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                      Reason / Note Provided
+                    </div>
+                    <p className="text-sm text-slate-800 bg-white p-3 rounded-lg border border-slate-200 leading-relaxed break-words">
+                      {selectedRequest.reason || 'No reason provided.'}
+                    </p>
+                  </div>
+
+                  {selectedRequest.approvedBy && (
+                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-medium">Reviewed By:</span>
+                      <span className="font-bold text-slate-800">{selectedRequest.approvedBy}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Employee Current Leave Balances */}
+              {selectedRequest.employee && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Current Leave Balances
+                  </h4>
+                  <div className="grid grid-cols-3 gap-2.5 text-center">
+                    <div className="p-2.5 rounded-xl border border-slate-200 bg-white">
+                      <div className="text-[11px] font-semibold text-slate-500">Remaining Annual</div>
+                      <div className="text-base font-extrabold text-slate-900 mt-0.5">
+                        {selectedRequest.employee.remainingAnnual ?? '-'}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl border border-slate-200 bg-white">
+                      <div className="text-[11px] font-semibold text-slate-500">Remaining Casual</div>
+                      <div className="text-base font-extrabold text-slate-900 mt-0.5">
+                        {selectedRequest.employee.remainingCasual ?? '-'}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl border border-slate-200 bg-white">
+                      <div className="text-[11px] font-semibold text-slate-500">Short Leaves</div>
+                      <div className="text-base font-extrabold text-[#1178a4] mt-0.5">
+                        {selectedRequest.employee.shortLeavesTaken ?? 0} / 2
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer / Decision Controls */}
+              <div className="pt-3 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRequest(null)}
+                  className="w-full sm:w-auto px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-semibold transition"
+                >
+                  Close
+                </button>
+
+                {canApproveRequest(selectedRequest) && (
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      disabled={submittingId === selectedRequest.id}
+                      onClick={(e) => handleDecision(selectedRequest.id, 'REJECTED', e)}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50"
+                    >
+                      Reject Request
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submittingId === selectedRequest.id}
+                      onClick={(e) => handleDecision(selectedRequest.id, 'APPROVED', e)}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition disabled:opacity-50"
+                    >
+                      Approve Request
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
