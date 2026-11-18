@@ -7,6 +7,7 @@ import LeaveApprovals from './components/LeaveApprovals';
 import EmployeePortal from './components/EmployeePortal';
 import AddEmployeeModal from './components/AddEmployeeModal';
 import BreachModal from './components/BreachModal';
+import DialogModal from './components/DialogModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -19,6 +20,7 @@ export default function App() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [breachData, setBreachData] = useState(null);
+  const [dialogData, setDialogData] = useState(null);
 
   const loadData = async () => {
     try {
@@ -147,12 +149,14 @@ export default function App() {
             employees={employees}
             onRefresh={loadData}
             onOpenAddModal={() => setIsAddModalOpen(true)}
+            onShowDialog={setDialogData}
           />
         ) : view === 'approvals' && isManagement ? (
           <LeaveApprovals
             currentUser={currentUser}
             leaveRequests={leaveRequests}
             onRefresh={loadData}
+            onShowDialog={setDialogData}
           />
         ) : (
           <EmployeePortal
@@ -161,6 +165,7 @@ export default function App() {
             leaveRequests={leaveRequests}
             onRefresh={loadData}
             onBreachDetected={setBreachData}
+            onShowDialog={setDialogData}
           />
         )}
       </main>
@@ -177,6 +182,13 @@ export default function App() {
         <BreachModal
           breachData={breachData}
           onClose={() => setBreachData(null)}
+        />
+      )}
+
+      {dialogData && (
+        <DialogModal
+          dialog={dialogData}
+          onClose={() => setDialogData(null)}
         />
       )}
     </div>

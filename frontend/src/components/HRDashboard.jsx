@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { UserPlus, Lock, Plus, Building2 } from 'lucide-react';
 import { updateRemainingLeaves, incrementShortLeave } from '../api';
 
-export default function HRDashboard({ currentUser, employees, onRefresh, onOpenAddModal }) {
+export default function HRDashboard({ currentUser, employees, onRefresh, onOpenAddModal, onShowDialog }) {
   const [localRemaining, setLocalRemaining] = useState({});
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
 
@@ -32,14 +32,26 @@ export default function HRDashboard({ currentUser, employees, onRefresh, onOpenA
     const parsed = parseFloat(value);
     const safeVal = isNaN(parsed) ? 0 : parsed;
     const res = await updateRemainingLeaves(empId, { [field]: safeVal, requesterRole: currentUser.role });
-    if (res.error) alert(res.error);
+    if (res.error) {
+      onShowDialog({
+        type: 'error',
+        title: 'Update Error',
+        message: res.error
+      });
+    }
     onRefresh();
   };
 
   const handleIncrement = async (empId) => {
     if (!isHR) return;
     const res = await incrementShortLeave(empId, currentUser.role);
-    if (res.error) alert(res.error);
+    if (res.error) {
+      onShowDialog({
+        type: 'error',
+        title: 'Update Error',
+        message: res.error
+      });
+    }
     onRefresh();
   };
 

@@ -7,7 +7,8 @@ export default function EmployeePortal({
   employees,
   leaveRequests = [],
   onRefresh,
-  onBreachDetected
+  onBreachDetected,
+  onShowDialog
 }) {
   const currentEmp = employees.find((e) => e.id === currentUser.id) || currentUser;
   const [leaveType, setLeaveType] = useState('annual');
@@ -20,37 +21,65 @@ export default function EmployeePortal({
   const handleAttendance = async () => {
     try {
       const res = await markAttendance(currentEmp.id);
-      if (res.error) alert(res.error);
+      if (res.error) {
+        onShowDialog({
+          type: 'error',
+          title: 'Attendance Notice',
+          message: res.error
+        });
+      }
       onRefresh();
     } catch (err) {
-      alert('Error marking attendance: ' + err.message);
+      onShowDialog({
+        type: 'error',
+        title: 'Attendance Error',
+        message: 'Error marking attendance: ' + err.message
+      });
     }
   };
 
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
     const reqDays = parseFloat(days);
-    if (!reqDays || reqDays <= 0) return alert('Enter a valid amount');
+    if (!reqDays || reqDays <= 0) {
+      return onShowDialog({
+        type: 'error',
+        title: 'Invalid Input',
+        message: 'Please enter a valid leave amount (at least 0.5 or 1).'
+      });
+    }
 
     setLoading(true);
     try {
       const res = await requestLeave(currentEmp.id, { type: leaveType, days: reqDays, reason });
 
       if (res.error) {
-        alert('Error: ' + res.error);
+        onShowDialog({
+          type: 'error',
+          title: 'Submission Error',
+          message: res.error
+        });
         return;
       }
 
       if (res.exceeded) {
         onBreachDetected(res);
       } else {
-        alert('Leave request submitted! You can track its approval status below.');
+        onShowDialog({
+          type: 'success',
+          title: 'Leave Request Submitted',
+          message: 'Leave request submitted! You can track its approval status below.'
+        });
       }
       setDays('1');
       setReason('');
       onRefresh();
     } catch (err) {
-      alert('Network Error: ' + err.message);
+      onShowDialog({
+        type: 'error',
+        title: 'Network Error',
+        message: 'Unable to submit request: ' + err.message
+      });
     } finally {
       setLoading(false);
     }

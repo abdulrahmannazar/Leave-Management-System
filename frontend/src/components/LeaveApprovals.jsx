@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, XCircle, Clock, AlertTriangle, Building2 } from 'lucide-react';
 import { updateLeaveRequestStatus } from '../api';
 
-export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh }) {
+export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, onShowDialog }) {
   const isAdminOrHR = ['ADMIN', 'HR'].includes(currentUser.role);
 
   const visibleRequests = leaveRequests.filter((req) => {
@@ -31,13 +31,25 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh }
         approverDept: currentUser.dept
       });
       if (res.error) {
-        alert(res.error);
+        onShowDialog({
+          type: 'error',
+          title: 'Action Denied',
+          message: res.error
+        });
       } else {
-        alert(`Leave request ${status.toLowerCase()}! HR has been notified.`);
+        onShowDialog({
+          type: 'success',
+          title: status === 'APPROVED' ? 'Leave Request Approved' : 'Leave Request Rejected',
+          message: `Leave request ${status.toLowerCase()}! HR has been notified.`
+        });
         onRefresh();
       }
     } catch (err) {
-      alert('Failed to update request status');
+      onShowDialog({
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Failed to update request status.'
+      });
     }
   };
 
