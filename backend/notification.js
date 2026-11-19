@@ -1,19 +1,7 @@
 // backend/notification.js
-require('dotenv').config();
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const createTransporter = () => {
-  const port = parseInt(process.env.EMAIL_PORT, 10) || 465;
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: port,
-    secure: port === 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-};
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendLeaveNotificationEmail = async ({
   eventType, // 'LEAVE_REQUESTED' | 'LEAVE_APPROVED'
@@ -26,11 +14,13 @@ const sendLeaveNotificationEmail = async ({
   exceedsQuota,
   exceededBy,
   reason,
+  attachmentName,
+  attachmentData,
   approvedBy
 }) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ Email credentials (EMAIL_USER / EMAIL_PASS) not configured. Skipping email dispatch.');
-    return { success: false, reason: 'Email credentials missing' };
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️ RESEND_API_KEY not configured. Skipping email dispatch.');
+    return { success: false, reason: 'API key missing' };
   }
 
   const hrEmail = process.env.HR_NOTIFICATION_EMAIL;
@@ -46,11 +36,22 @@ const sendLeaveNotificationEmail = async ({
     ? (endDate && endDate !== startDate ? `${startDate} to ${endDate}` : startDate)
     : 'Not specified';
 
+  // Extract Base64 file content for Resend attachment if provided
+  const attachments = [];
+  if (attachmentName && attachmentData && attachmentData.includes(';base64,')) {
+    const base64Content = attachmentData.split(';base64,')[1];
+    if (base64Content) {
+      attachments.push({
+        filename: attachmentName,
+        content: base64Content
+      });
+    }
+  }
+
   try {
-    const transporter = createTransporter();
-    const info = await transporter.sendMail({
-      from: `"Leave Management System" <${process.env.EMAIL_USER}>`,
-      to: hrEmail,
+    const emailPayload = {
+      from: 'Leave Management System <onboarding@resend.dev>',
+      to: [hrEmail],
       subject: `${subjectPrefix} ${employee.name} (${employee.dept}) - ${actionLabel}`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid ${isBreach ? '#dc2626' : '#cbd5e1'}; border-radius: 8px;">
@@ -70,13 +71,25 @@ const sendLeaveNotificationEmail = async ({
             <tr><td style="padding: 8px; font-weight: bold;">Current Remaining:</td><td>${currentRemaining}</td></tr>
             ${isBreach ? `<tr><td style="padding: 8px; font-weight: bold; color: #dc2626;">Exceeded Quota By:</td><td style="color: #dc2626; font-weight: bold;">${exceededBy}</td></tr>` : ''}
             <tr><td style="padding: 8px; font-weight: bold;">Reason:</td><td>${reason || 'None provided'}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Supporting Evidence:</td><td>${attachmentName ? `📎 ${attachmentName} (Attached)` : 'None attached'}</td></tr>
           </table>
         </div>
       `
-    });
+    };
 
-    console.log('✅ HR Notification email dispatched! ID:', info.messageId);
-    return { success: true, id: info.messageId };
+    if (attachments.length > 0) {
+      emailPayload.attachments = attachments;
+    }
+
+    const { data, error } = await resend.emails.send(emailPayload);
+
+    if (error) {
+      console.error('❌ Resend API Error:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ HR Notification email dispatched! ID:', data.id);
+    return { success: true, id: data.id };
   } catch (err) {
     console.error('❌ Unexpected email error:', err.message);
     return { success: false, error: err.message };

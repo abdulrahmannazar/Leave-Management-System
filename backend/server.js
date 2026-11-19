@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -17,7 +16,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
+// Increased JSON body limit to support supporting evidence attachments (up to 10MB)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Local timezone configuration (Sri Lanka - UTC+5:30)
 const TIMEZONE = 'Asia/Colombo';
@@ -357,10 +358,10 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
 
 // ================= LEAVE REQUEST & APPROVAL ROUTES =================
 
-// 8. Submit Leave Request (Creates PENDING request with Start & End Dates & notifies HR)
+// 8. Submit Leave Request (Creates PENDING request with Dates + Supporting Evidence & notifies HR)
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
-  const { type, days, startDate, endDate, reason } = req.body;
+  const { type, days, startDate, endDate, reason, attachmentName, attachmentData } = req.body;
   const requestedAmount = roundToOneDecimal(parseFloat(days));
 
   if (isNaN(requestedAmount) || requestedAmount <= 0) {
@@ -418,13 +419,15 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
         startDate,
         endDate: computedEndDate,
         reason: reason || 'No reason provided',
+        attachmentName: attachmentName || null,
+        attachmentData: attachmentData || null,
         status: 'PENDING',
         exceedsQuota,
         exceededBy
       }
     });
 
-    // Notify HR via Email for every leave requested
+    // Notify HR via Email for every leave requested (including supporting attachment if any)
     const emailResult = await sendLeaveNotificationEmail({
       eventType: 'LEAVE_REQUESTED',
       employee: emp,
@@ -435,7 +438,9 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
       currentRemaining,
       exceedsQuota,
       exceededBy,
-      reason
+      reason,
+      attachmentName,
+      attachmentData
     });
 
     const { password: _, ...empSafe } = emp;
@@ -450,6 +455,7 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
       leaveType: leaveTypeName,
       remaining: currentRemaining,
       reason,
+      attachmentName: attachmentName || null,
       emailSent: emailResult.success
     });
   } catch (error) {
@@ -541,6 +547,8 @@ app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
         exceedsQuota: updatedReq.exceedsQuota,
         exceededBy: updatedReq.exceededBy,
         reason: updatedReq.reason,
+        attachmentName: updatedReq.attachmentName,
+        attachmentData: updatedReq.attachmentData,
         approvedBy: `${approverName} (${approverRole})`
       });
     }

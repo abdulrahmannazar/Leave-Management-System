@@ -26,17 +26,19 @@ model Employee {
 }
 
 model LeaveRequest {
-  id           Int      @id @default(autoincrement())
-  employeeId   String
-  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType    String   // "Annual Leave" | "Casual Leave" | "Short Leave"
-  days         Float
-  startDate    String?  // YYYY-MM-DD
-  endDate      String?  // YYYY-MM-DD (Auto-calculated)
-  reason       String
-  status       String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
-  approvedBy   String?
-  exceedsQuota Boolean  @default(false)
-  exceededBy   Float    @default(0)
-  createdAt    DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  employeeId     String
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType      String   // "Annual Leave" | "Casual Leave" | "Short Leave"
+  days           Float
+  startDate      String?  // YYYY-MM-DD
+  endDate        String?  // YYYY-MM-DD (Auto-calculated)
+  reason         String
+  attachmentName String?  // Original file name (e.g., "medical_certificate.pdf")
+  attachmentData String?  // Base64 Data URL of the supporting document
+  status         String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  approvedBy     String?
+  exceedsQuota   Boolean  @default(false)
+  exceededBy     Float    @default(0)
+  createdAt      DateTime @default(now())
 }
