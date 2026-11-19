@@ -1,7 +1,19 @@
 // backend/notification.js
-const { Resend } = require('resend');
+require('dotenv').config();
+const nodemailer = require('nodemailer');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const createTransporter = () => {
+  const port = parseInt(process.env.EMAIL_PORT, 10) || 465;
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: port,
+    secure: port === 465,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+};
 
 const sendLeaveNotificationEmail = async ({
   eventType, // 'LEAVE_REQUESTED' | 'LEAVE_APPROVED'
@@ -16,9 +28,9 @@ const sendLeaveNotificationEmail = async ({
   reason,
   approvedBy
 }) => {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn('⚠️ RESEND_API_KEY not configured. Skipping email dispatch.');
-    return { success: false, reason: 'API key missing' };
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠️ Email credentials (EMAIL_USER / EMAIL_PASS) not configured. Skipping email dispatch.');
+    return { success: false, reason: 'Email credentials missing' };
   }
 
   const hrEmail = process.env.HR_NOTIFICATION_EMAIL;
@@ -35,9 +47,10 @@ const sendLeaveNotificationEmail = async ({
     : 'Not specified';
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'Leave Management System <onboarding@resend.dev>',
-      to: [hrEmail],
+    const transporter = createTransporter();
+    const info = await transporter.sendMail({
+      from: `"Leave Management System" <${process.env.EMAIL_USER}>`,
+      to: hrEmail,
       subject: `${subjectPrefix} ${employee.name} (${employee.dept}) - ${actionLabel}`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid ${isBreach ? '#dc2626' : '#cbd5e1'}; border-radius: 8px;">
@@ -62,13 +75,8 @@ const sendLeaveNotificationEmail = async ({
       `
     });
 
-    if (error) {
-      console.error('❌ Resend API Error:', error.message);
-      return { success: false, error: error.message };
-    }
-
-    console.log('✅ HR Notification email dispatched! ID:', data.id);
-    return { success: true, id: data.id };
+    console.log('✅ HR Notification email dispatched! ID:', info.messageId);
+    return { success: true, id: info.messageId };
   } catch (err) {
     console.error('❌ Unexpected email error:', err.message);
     return { success: false, error: err.message };
