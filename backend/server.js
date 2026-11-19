@@ -36,6 +36,17 @@ const getCurrentTimeString = () => {
   });
 };
 
+// Inclusive End Date calculator from YYYY-MM-DD startDate + requested days
+const calculateEndDate = (startDateStr, days, isShortLeave) => {
+  if (!startDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) return startDateStr || getTodayString();
+  if (isShortLeave) return startDateStr;
+
+  const totalDays = Math.max(1, Math.ceil(days));
+  const [year, month, day] = startDateStr.split('-').map(Number);
+  const endObj = new Date(Date.UTC(year, month - 1, day + (totalDays - 1)));
+  return endObj.toISOString().split('T')[0];
+};
+
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
 const MONTHLY_SHORT_LEAVE_LIMIT = 2;
 
@@ -345,14 +356,18 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
 
 // ================= LEAVE REQUEST & APPROVAL ROUTES =================
 
-// 8. Submit Leave Request (Creates PENDING request & notifies HR)
+// 8. Submit Leave Request (Creates PENDING request with Start & End Dates & notifies HR)
 app.post('/api/employees/:id/leave-request', async (req, res) => {
   const { id } = req.params;
-  const { type, days, reason } = req.body;
+  const { type, days, startDate, endDate, reason } = req.body;
   const requestedAmount = roundToOneDecimal(parseFloat(days));
 
   if (isNaN(requestedAmount) || requestedAmount <= 0) {
     return res.status(400).json({ error: 'Requested amount must be at least 0.5.' });
+  }
+
+  if (!startDate) {
+    return res.status(400).json({ error: 'Please select a leave start date.' });
   }
 
   try {
@@ -361,13 +376,16 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
 
     emp = await ensureDailyReset(emp);
     const selectedType = String(type).toLowerCase();
+    const isShort = selectedType.includes('short');
+
+    const computedEndDate = endDate || calculateEndDate(startDate, requestedAmount, isShort);
 
     let leaveTypeName = 'Annual Leave';
     let currentRemaining = emp.remainingAnnual;
     let exceedsQuota = false;
     let exceededBy = 0;
 
-    if (selectedType.includes('short')) {
+    if (isShort) {
       leaveTypeName = 'Short Leave';
       currentRemaining = Math.max(0, roundToOneDecimal(MONTHLY_SHORT_LEAVE_LIMIT - emp.shortLeavesTaken));
       if (emp.shortLeavesTaken + requestedAmount > MONTHLY_SHORT_LEAVE_LIMIT) {
@@ -396,6 +414,8 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
         employeeId: emp.id,
         leaveType: leaveTypeName,
         days: requestedAmount,
+        startDate,
+        endDate: computedEndDate,
         reason: reason || 'No reason provided',
         status: 'PENDING',
         exceedsQuota,
@@ -409,6 +429,8 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
       employee: emp,
       leaveType: leaveTypeName,
       requestedDays: requestedAmount,
+      startDate,
+      endDate: computedEndDate,
       currentRemaining,
       exceedsQuota,
       exceededBy,
@@ -422,6 +444,8 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
       employee: empSafe,
       exceededBy,
       requestedDays: requestedAmount,
+      startDate,
+      endDate: computedEndDate,
       leaveType: leaveTypeName,
       remaining: currentRemaining,
       reason,
@@ -510,6 +534,8 @@ app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
         employee: emp,
         leaveType: updatedReq.leaveType,
         requestedDays: updatedReq.days,
+        startDate: updatedReq.startDate,
+        endDate: updatedReq.endDate,
         currentRemaining,
         exceedsQuota: updatedReq.exceedsQuota,
         exceededBy: updatedReq.exceededBy,

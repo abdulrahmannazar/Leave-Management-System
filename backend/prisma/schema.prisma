@@ -31,6 +31,8 @@ model LeaveRequest {
   employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   leaveType    String   // "Annual Leave" | "Casual Leave" | "Short Leave"
   days         Float
+  startDate    String?  // YYYY-MM-DD
+  endDate      String?  // YYYY-MM-DD (Auto-calculated)
   reason       String
   status       String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
   approvedBy   String?
