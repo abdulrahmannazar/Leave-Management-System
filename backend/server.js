@@ -9,6 +9,7 @@ const app = express();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'leavecore_super_secret_jwt_key_2026';
 
+// CORS configuration (compatible with Express 5)
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -17,11 +18,28 @@ app.use(cors({
 
 app.use(express.json());
 
-const getTodayString = () => new Date().toISOString().split('T')[0];
+// Local timezone configuration (Sri Lanka - UTC+5:30)
+const TIMEZONE = 'Asia/Colombo';
+
+const getTodayString = () => {
+  // Returns YYYY-MM-DD in Asia/Colombo local time
+  return new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+};
+
+const getCurrentTimeString = () => {
+  // Returns actual Asia/Colombo local time (e.g., "03:39 PM")
+  return new Date().toLocaleTimeString('en-US', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
 const MONTHLY_SHORT_LEAVE_LIMIT = 2;
 
-// Helper to generate unique Employee IDs by Role
+// Generate unique Role-based IDs (e.g. EMP001-42, MGR002-19)
 const generateEmployeeId = async (role) => {
   const prefix =
     role === 'ADMIN' ? 'ADM' :
@@ -36,7 +54,7 @@ const generateEmployeeId = async (role) => {
 // Daily attendance & monthly short leave reset
 const ensureDailyReset = async (emp) => {
   const today = getTodayString();
-  const currentMonth = today.slice(0, 7);
+  const currentMonth = today.slice(0, 7); // 'YYYY-MM'
   const empMonth = emp.attendanceDate ? emp.attendanceDate.slice(0, 7) : currentMonth;
   const updateData = {};
 
@@ -45,9 +63,11 @@ const ensureDailyReset = async (emp) => {
     updateData.presentToday = false;
     updateData.presentTime = null;
   }
+
   if (empMonth !== currentMonth) {
     updateData.shortLeavesTaken = 0;
   }
+
   if (Object.keys(updateData).length > 0) {
     return await prisma.employee.update({
       where: { id: emp.id },
@@ -57,17 +77,27 @@ const ensureDailyReset = async (emp) => {
   return emp;
 };
 
+// Health Check Endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Leave Management System API is live and running' });
+});
+
 // ================= AUTHENTICATION ROUTES =================
 
-// 1. Register a New User
+// 1. Register a Management User (Employees cannot self-register)
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password, role, dept, allowedAnnual, allowedCasual } = req.body;
 
-  if (role === 'EMPLOYEE') {
-    return res.status(403).json({ error: 'Employees cannot self-register. Please ask your Supervisor, Manager, or HR to create your account.' });
+  if (!name || !email || !password || !role || !dept) {
+    return res.status(400).json({ error: 'All fields (Name, Email, Password, Role, Department) are required.' });
   }
 
-  
+  if (role === 'EMPLOYEE') {
+    return res.status(403).json({
+      error: 'Employees cannot self-register. Please ask your Supervisor, Department Manager, or HR to create your credentials.'
+    });
+  }
+
   try {
     const cleanEmail = email.trim().toLowerCase();
     const existingEmail = await prisma.employee.findUnique({ where: { email: cleanEmail } });
@@ -75,7 +105,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'An account with this email already exists.' });
     }
 
-    // Rule 3: Each department can only have 1 Manager
+    // Rule: Each department can only have 1 Manager
     if (role === 'MANAGER') {
       const existingManager = await prisma.employee.findFirst({
         where: { dept, role: 'MANAGER' }
@@ -123,7 +153,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 2. Login User
+// 2. Login User (Supports Email or Employee ID)
 app.post('/api/auth/login', async (req, res) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {
@@ -141,7 +171,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Account not found. Please check your credentials or register.' });
+      return res.status(401).json({ error: 'Account not found. Please check your credentials.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -158,13 +188,14 @@ app.post('/api/auth/login', async (req, res) => {
     const { password: _, ...userSafe } = user;
     res.json({ token, user: userSafe });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login.' });
   }
 });
 
 // ================= EMPLOYEE & HIERARCHY ROUTES =================
 
-// 3. Get Employees
+// 3. Get All Employees
 app.get('/api/employees', async (req, res) => {
   try {
     let employees = await prisma.employee.findMany({ orderBy: { name: 'asc' } });
@@ -176,7 +207,7 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// 4. Add Employee Credentials (Used by HR, Managers, Supervisors, Admin)
+// 4. Add Staff Credentials (By HR, Managers, Supervisors, or Admin)
 app.post('/api/employees', async (req, res) => {
   const { name, email, password, role, dept, allowedAnnual, allowedCasual, creatorRole, creatorDept } = req.body;
 
@@ -199,7 +230,7 @@ app.post('/api/employees', async (req, res) => {
       return res.status(400).json({ error: 'An employee with this email already exists.' });
     }
 
-    // Rule 3: Only 1 Manager per department
+    // Rule: Only 1 Manager per department
     if (role === 'MANAGER') {
       const existingManager = await prisma.employee.findFirst({
         where: { dept, role: 'MANAGER' }
@@ -240,7 +271,7 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-// 5. Rule 6: HR ONLY can reduce/update remaining leave count
+// 5. HR ONLY: Reduce/Update Remaining Leave Counts
 app.patch('/api/employees/:id/remaining', async (req, res) => {
   const { id } = req.params;
   const { remainingAnnual, remainingCasual, shortLeavesTaken, requesterRole } = req.body;
@@ -263,7 +294,7 @@ app.patch('/api/employees/:id/remaining', async (req, res) => {
   }
 });
 
-// 6. Rule 6: HR ONLY quick increment short leaves (+1)
+// 6. HR ONLY: Quick Increment Short Leaves (+1)
 app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
   const { id } = req.params;
   const { requesterRole } = req.body;
@@ -288,7 +319,7 @@ app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
   }
 });
 
-// 7. Mark Daily Attendance
+// 7. Mark Daily Attendance (Uses actual Asia/Colombo local time)
 app.post('/api/employees/:id/attendance', async (req, res) => {
   const { id } = req.params;
   try {
@@ -302,7 +333,7 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
       where: { id },
       data: {
         presentToday: true,
-        presentTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        presentTime: getCurrentTimeString()
       }
     });
     const { password: _, ...empSafe } = updated;
@@ -359,7 +390,7 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
       }
     }
 
-    // Save Leave Request to Database (Balance is NOT auto-deducted; only HR reduces leave count)
+    // Create Pending Leave Request (HR reduces balance manually)
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
         employeeId: emp.id,
@@ -431,7 +462,7 @@ app.get('/api/leave-requests', async (req, res) => {
 // 10. Approve or Reject Leave Request (Supervisors, Managers, Admin) & Notify HR
 app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
   const { reqId } = req.params;
-  const { status, approverName, approverRole, approverDept } = req.body; // status: 'APPROVED' | 'REJECTED'
+  const { status, approverName, approverRole, approverDept } = req.body; // 'APPROVED' | 'REJECTED'
 
   if (!['APPROVED', 'REJECTED'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
@@ -445,7 +476,7 @@ app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
 
     if (!leaveReq) return res.status(404).json({ error: 'Leave request not found' });
 
-    // Permission check: Supervisors and Managers can only approve for their own department
+    // Enforce departmental approval hierarchy
     if (['SUPERVISOR', 'MANAGER'].includes(approverRole)) {
       if (leaveReq.employee.dept !== approverDept) {
         return res.status(403).json({ error: 'You can only approve/reject leave requests for your own department.' });
@@ -466,13 +497,13 @@ app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
       include: { employee: true }
     });
 
-    // Rule 6: Notify HR whenever a leave is approved so HR can reduce the remaining leave count
+    // Notify HR when approved so HR can manually reduce the employee's remaining balance
     if (status === 'APPROVED') {
       const emp = updatedReq.employee;
       const currentRemaining =
         updatedReq.leaveType === 'Annual Leave' ? emp.remainingAnnual :
         updatedReq.leaveType === 'Casual Leave' ? emp.remainingCasual :
-        Math.max(0, 2 - emp.shortLeavesTaken);
+        Math.max(0, MONTHLY_SHORT_LEAVE_LIMIT - emp.shortLeavesTaken);
 
       await sendLeaveNotificationEmail({
         eventType: 'LEAVE_APPROVED',
@@ -494,4 +525,4 @@ app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`LeaveCore API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Leave Management System API running on port ${PORT}`));
