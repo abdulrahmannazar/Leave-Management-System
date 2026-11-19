@@ -1,5 +1,17 @@
-import React, { useState, useMemo } from 'react';
-import { Calendar, Sun, Clock, CheckCircle2, XCircle, AlertTriangle, Building2 } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import {
+  Calendar,
+  Sun,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Building2,
+  Paperclip,
+  UploadCloud,
+  X,
+  FileText
+} from 'lucide-react';
 import { markAttendance, requestLeave } from '../api';
 
 // Returns YYYY-MM-DD in Asia/Colombo local time
@@ -21,6 +33,20 @@ const computeEndDate = (startDateStr, daysValue, leaveCategory) => {
   return endObj.toISOString().split('T')[0];
 };
 
+// Opens a Base64 Data URL reliably in a new browser tab via Blob URL
+const openDataUrlInNewTab = async (dataUrl) => {
+  try {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    window.open(dataUrl, '_blank', 'noopener,noreferrer');
+  }
+};
+
+const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024; // 3 MB
+
 export default function EmployeePortal({
   currentUser,
   employees,
@@ -34,7 +60,10 @@ export default function EmployeePortal({
   const [days, setDays] = useState('1');
   const [startDate, setStartDate] = useState(() => getLocalToday());
   const [reason, setReason] = useState('');
+  const [attachment, setAttachment] = useState(null); // { name, size, dataUrl }
   const [loading, setLoading] = useState(false);
+
+  const fileInputRef = useRef(null);
 
   // Auto-calculate End Date whenever Start Date, Days Requested, or Category changes
   const endDate = useMemo(
@@ -43,6 +72,44 @@ export default function EmployeePortal({
   );
 
   const myLeaveRequests = leaveRequests.filter((req) => req.employeeId === currentEmp.id);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return onShowDialog({
+        type: 'error',
+        title: 'File Too Large',
+        message: 'Supporting evidence must be 3 MB or smaller. Please compress the file or upload a smaller copy.'
+      });
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachment({
+        name: file.name,
+        size: (file.size / 1024).toFixed(1) + ' KB',
+        dataUrl: reader.result
+      });
+    };
+    reader.onerror = () => {
+      onShowDialog({
+        type: 'error',
+        title: 'File Read Error',
+        message: 'Could not read the selected file. Please try another file.'
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveAttachment = () => {
+    setAttachment(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleAttendance = async () => {
     try {
@@ -90,7 +157,9 @@ export default function EmployeePortal({
         days: reqDays,
         startDate,
         endDate,
-        reason
+        reason,
+        attachmentName: attachment ? attachment.name : null,
+        attachmentData: attachment ? attachment.dataUrl : null
       });
 
       if (res.error) {
@@ -114,6 +183,7 @@ export default function EmployeePortal({
       setDays('1');
       setStartDate(getLocalToday());
       setReason('');
+      handleRemoveAttachment();
       onRefresh();
     } catch (err) {
       onShowDialog({
@@ -266,6 +336,67 @@ export default function EmployeePortal({
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
             />
           </div>
+
+          {/* Supporting Evidence / Attachment Upload */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+              Supporting Evidence <span className="text-[10px] font-normal text-slate-400 normal-case">(Optional &bull; Medical certificate, letter, PDF or image, max 3 MB)</span>
+            </label>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+              onChange={handleFileChange}
+              className="hidden"
+              id="leave-evidence-input"
+            />
+
+            {!attachment ? (
+              <label
+                htmlFor="leave-evidence-input"
+                className="flex flex-col sm:flex-row items-center justify-center gap-2.5 w-full p-4 border-2 border-dashed border-slate-300 hover:border-[#1178a4] bg-slate-50 hover:bg-sky-50/40 rounded-xl cursor-pointer transition text-center sm:text-left"
+              >
+                <div className="w-9 h-9 rounded-lg bg-sky-50 text-[#1178a4] flex items-center justify-center shrink-0">
+                  <UploadCloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-semibold text-slate-700">
+                    Click to attach supporting document
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Supports PDF, JPG, PNG, WebP, DOC, DOCX (Max 3 MB)
+                  </div>
+                </div>
+              </label>
+            ) : (
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-sky-50/70 border border-sky-200">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-[#1178a4] text-white flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
+                      {attachment.name}
+                    </div>
+                    <div className="text-[11px] text-[#1178a4] font-medium">
+                      {attachment.size} &bull; Ready to upload
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveAttachment}
+                  title="Remove attachment"
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -286,13 +417,13 @@ export default function EmployeePortal({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[740px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
                 <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Leave Dates</th>
                 <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Leave Category</th>
                 <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Days / Count</th>
-                <th className="px-4 sm:px-5 py-3">Reason</th>
+                <th className="px-4 sm:px-5 py-3">Reason & Evidence</th>
                 <th className="px-4 sm:px-5 py-3 text-center whitespace-nowrap">Quota Status</th>
                 <th className="px-4 sm:px-5 py-3 text-center whitespace-nowrap">Approval Status</th>
               </tr>
@@ -331,8 +462,18 @@ export default function EmployeePortal({
                     <td className="px-4 sm:px-5 py-3.5 text-sm font-bold text-[#1178a4] whitespace-nowrap">
                       {req.days} {req.leaveType === 'Short Leave' ? 'Count' : 'Days'}
                     </td>
-                    <td className="px-4 sm:px-5 py-3.5 text-sm text-slate-600 min-w-[140px] max-w-xs break-words">
-                      {req.reason}
+                    <td className="px-4 sm:px-5 py-3.5 text-sm text-slate-600 min-w-[160px] max-w-xs">
+                      <div className="break-words">{req.reason}</div>
+                      {req.attachmentName && req.attachmentData && (
+                        <button
+                          type="button"
+                          onClick={() => openDataUrlInNewTab(req.attachmentData)}
+                          className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-[#1178a4] hover:bg-sky-100 border border-sky-200 transition"
+                        >
+                          <Paperclip className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[160px]">{req.attachmentName}</span>
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 sm:px-5 py-3.5 text-center whitespace-nowrap">
                       {req.exceedsQuota ? (

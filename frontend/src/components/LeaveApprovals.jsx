@@ -10,9 +10,24 @@ import {
   Mail,
   Calendar,
   FileText,
-  Eye
+  Eye,
+  Paperclip,
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import { updateLeaveRequestStatus } from '../api';
+
+// Opens a Base64 Data URL reliably in a new browser tab via Blob URL
+const openDataUrlInNewTab = async (dataUrl) => {
+  try {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    window.open(dataUrl, '_blank', 'noopener,noreferrer');
+  }
+};
 
 export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, onShowDialog }) {
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -115,7 +130,7 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
           {isAdminOrHR ? 'All Company Leave Requests & Approvals' : `${currentUser.dept} Department Leave Approvals`}
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Click on any leave request row to view full employee and quota details. Supervisors and Department Managers approve department requests.
+          Click on any leave request row to view full employee, supporting evidence, and quota details. Supervisors and Department Managers approve department requests.
         </p>
       </div>
 
@@ -127,7 +142,7 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                 <th className="px-4 sm:px-5 py-3.5 whitespace-nowrap">Employee</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Dept & Role</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Leave Type & Dates</th>
-                <th className="px-4 py-3.5">Reason</th>
+                <th className="px-4 py-3.5">Reason & Evidence</th>
                 <th className="px-4 py-3.5 text-center whitespace-nowrap">Quota Check</th>
                 <th className="px-4 py-3.5 text-center whitespace-nowrap">Status</th>
                 <th className="px-4 sm:px-5 py-3.5 text-center whitespace-nowrap">Action</th>
@@ -174,8 +189,14 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                       )}
                     </td>
 
-                    <td className="px-4 py-4 text-sm text-slate-600 min-w-[160px] max-w-xs truncate">
-                      {req.reason}
+                    <td className="px-4 py-4 text-sm text-slate-600 min-w-[160px] max-w-xs">
+                      <div className="truncate">{req.reason}</div>
+                      {req.attachmentName && (
+                        <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-50 text-[#1178a4] border border-sky-200">
+                          <Paperclip className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[150px]">{req.attachmentName}</span>
+                        </span>
+                      )}
                     </td>
 
                     <td className="px-4 py-4 text-center whitespace-nowrap">
@@ -422,6 +443,64 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Supporting Evidence Section */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Supporting Evidence
+                </h4>
+                {selectedRequest.attachmentName && selectedRequest.attachmentData ? (
+                  <div className="p-3.5 rounded-xl border border-sky-200 bg-sky-50/50 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-[#1178a4] text-white flex items-center justify-center shrink-0">
+                          <Paperclip className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 truncate max-w-[200px] sm:max-w-[240px]">
+                            {selectedRequest.attachmentName}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Attached by employee
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openDataUrlInNewTab(selectedRequest.attachmentData)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-[#1178a4] border border-sky-200 rounded-lg text-xs font-semibold shadow-sm transition"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> View
+                        </button>
+                        <a
+                          href={selectedRequest.attachmentData}
+                          download={selectedRequest.attachmentName}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#1178a4] hover:bg-[#0e6388] text-white rounded-lg text-xs font-semibold shadow-sm transition"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Inline Preview if Supporting Evidence is an Image */}
+                    {selectedRequest.attachmentData.startsWith('data:image/') && (
+                      <div className="pt-2 border-t border-sky-200/70">
+                        <img
+                          src={selectedRequest.attachmentData}
+                          alt={selectedRequest.attachmentName}
+                          className="max-h-48 w-auto mx-auto rounded-lg border border-slate-200 object-contain bg-white"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500 italic">
+                    No supporting evidence was attached to this request.
+                  </div>
+                )}
               </div>
 
               {/* Employee Current Leave Balances */}
