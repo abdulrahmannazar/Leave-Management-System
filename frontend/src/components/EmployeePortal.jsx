@@ -1,6 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Calendar, Sun, Clock, CheckCircle2, XCircle, AlertTriangle, Building2 } from 'lucide-react';
 import { markAttendance, requestLeave } from '../api';
+
+// Returns YYYY-MM-DD in Asia/Colombo local time
+const getLocalToday = () => {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+};
+
+// Inclusive End Date calculator from YYYY-MM-DD startDate + requested days
+const computeEndDate = (startDateStr, daysValue, leaveCategory) => {
+  if (!startDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) return '';
+  if (leaveCategory === 'short') return startDateStr;
+
+  const parsed = parseFloat(daysValue);
+  if (isNaN(parsed) || parsed <= 0) return startDateStr;
+
+  const totalDays = Math.max(1, Math.ceil(parsed));
+  const [year, month, day] = startDateStr.split('-').map(Number);
+  const endObj = new Date(Date.UTC(year, month - 1, day + (totalDays - 1)));
+  return endObj.toISOString().split('T')[0];
+};
 
 export default function EmployeePortal({
   currentUser,
@@ -13,8 +32,15 @@ export default function EmployeePortal({
   const currentEmp = employees.find((e) => e.id === currentUser.id) || currentUser;
   const [leaveType, setLeaveType] = useState('annual');
   const [days, setDays] = useState('1');
+  const [startDate, setStartDate] = useState(() => getLocalToday());
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Auto-calculate End Date whenever Start Date, Days Requested, or Category changes
+  const endDate = useMemo(
+    () => computeEndDate(startDate, days, leaveType),
+    [startDate, days, leaveType]
+  );
 
   const myLeaveRequests = leaveRequests.filter((req) => req.employeeId === currentEmp.id);
 
@@ -49,9 +75,23 @@ export default function EmployeePortal({
       });
     }
 
+    if (!startDate) {
+      return onShowDialog({
+        type: 'error',
+        title: 'Start Date Required',
+        message: 'Please select a valid start date for your leave.'
+      });
+    }
+
     setLoading(true);
     try {
-      const res = await requestLeave(currentEmp.id, { type: leaveType, days: reqDays, reason });
+      const res = await requestLeave(currentEmp.id, {
+        type: leaveType,
+        days: reqDays,
+        startDate,
+        endDate,
+        reason
+      });
 
       if (res.error) {
         onShowDialog({
@@ -68,10 +108,11 @@ export default function EmployeePortal({
         onShowDialog({
           type: 'success',
           title: 'Leave Request Submitted',
-          message: 'Leave request submitted! You can track its approval status below.'
+          message: `Leave request from ${startDate} to ${endDate} submitted! You can track its approval status below.`
         });
       }
       setDays('1');
+      setStartDate(getLocalToday());
       setReason('');
       onRefresh();
     } catch (err) {
@@ -186,6 +227,34 @@ export default function EmployeePortal({
               />
             </div>
           </div>
+
+          {/* Start Date & Auto-Calculated End Date */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-[#1178a4] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                End Date <span className="text-[10px] font-medium text-[#1178a4] normal-case">(Auto-calculated)</span>
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                readOnly
+                className="w-full bg-sky-50/70 border border-sky-200 text-[#1178a4] font-semibold rounded-lg px-3 py-2.5 sm:py-2 text-sm cursor-not-allowed focus:outline-none"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Reason / Note</label>
             <input
@@ -217,10 +286,10 @@ export default function EmployeePortal({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[640px]">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Date</th>
+                <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Leave Dates</th>
                 <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Leave Category</th>
                 <th className="px-4 sm:px-5 py-3 whitespace-nowrap">Days / Count</th>
                 <th className="px-4 sm:px-5 py-3">Reason</th>
@@ -238,8 +307,23 @@ export default function EmployeePortal({
               ) : (
                 myLeaveRequests.map((req) => (
                   <tr key={req.id} className="hover:bg-slate-50 transition">
-                    <td className="px-4 sm:px-5 py-3.5 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(req.createdAt).toLocaleDateString()}
+                    <td className="px-4 sm:px-5 py-3.5 text-xs whitespace-nowrap">
+                      {req.startDate ? (
+                        <div>
+                          <div className="font-semibold text-slate-800">
+                            {req.startDate === req.endDate || !req.endDate
+                              ? req.startDate
+                              : `${req.startDate} → ${req.endDate}`}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            Applied {new Date(req.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">
+                          {new Date(req.createdAt).toLocaleDateString()}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 sm:px-5 py-3.5 font-semibold text-sm text-slate-900 whitespace-nowrap">
                       {req.leaveType}

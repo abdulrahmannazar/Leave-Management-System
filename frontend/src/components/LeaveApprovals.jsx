@@ -102,6 +102,12 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
     return `${d.toLocaleDateString()} at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   };
 
+  const formatLeaveDateRange = (req) => {
+    if (!req.startDate) return null;
+    if (!req.endDate || req.startDate === req.endDate) return req.startDate;
+    return `${req.startDate} → ${req.endDate}`;
+  };
+
   return (
     <div className="space-y-5 sm:space-y-6">
       <div>
@@ -120,7 +126,7 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
                 <th className="px-4 sm:px-5 py-3.5 whitespace-nowrap">Employee</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Dept & Role</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">Leave Type & Days</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Leave Type & Dates</th>
                 <th className="px-4 py-3.5">Reason</th>
                 <th className="px-4 py-3.5 text-center whitespace-nowrap">Quota Check</th>
                 <th className="px-4 py-3.5 text-center whitespace-nowrap">Status</th>
@@ -161,6 +167,11 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                       <div className="text-xs font-bold text-[#1178a4]">
                         {req.days} {req.leaveType === 'Short Leave' ? 'Count' : 'Days'}
                       </div>
+                      {formatLeaveDateRange(req) && (
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {formatLeaveDateRange(req)}
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-4 py-4 text-sm text-slate-600 min-w-[160px] max-w-xs truncate">
@@ -377,6 +388,23 @@ export default function LeaveApprovals({ currentUser, leaveRequests, onRefresh, 
                       </div>
                     </div>
                   </div>
+
+                  {selectedRequest.startDate && (
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-200/80">
+                      <div>
+                        <div className="text-xs text-slate-500">Start Date</div>
+                        <div className="text-sm font-bold text-slate-800 mt-0.5">
+                          {selectedRequest.startDate}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500">End Date</div>
+                        <div className="text-sm font-bold text-[#1178a4] mt-0.5">
+                          {selectedRequest.endDate || selectedRequest.startDate}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="pt-3 border-t border-slate-200/80">
                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
