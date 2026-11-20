@@ -38,9 +38,13 @@ model LeaveRequest {
   attachmentData String?  // Base64 Data URL of the supporting document
   status         String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
   approvedBy     String?
-  exceedsQuota   Boolean  @default(false)
-  exceededBy     Float    @default(0)
-  createdAt      DateTime @default(now())
+  exceedsQuota     Boolean  @default(false)
+  exceededBy       Float    @default(0)
+  proofRequested   Boolean  @default(false)
+  proofStatus      String   @default("NONE") // "NONE" | "REQUESTED" | "SUBMITTED"
+  proofRequestNote String?
+  proofRequestedBy String?
+  createdAt        DateTime @default(now())
 }
 
 model UserSession {

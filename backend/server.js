@@ -36,6 +36,13 @@ const ensureSessionTable = async () => {
     await prisma.$executeRawUnsafe(`
       CREATE INDEX IF NOT EXISTS "UserSession_employeeId_idx" ON "UserSession"("employeeId");
     `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "LeaveRequest"
+        ADD COLUMN IF NOT EXISTS "proofRequested" BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS "proofStatus" TEXT NOT NULL DEFAULT 'NONE',
+        ADD COLUMN IF NOT EXISTS "proofRequestNote" TEXT,
+        ADD COLUMN IF NOT EXISTS "proofRequestedBy" TEXT;
+    `);
   } catch (err) {
     console.warn('Session table initialization notice:', err.message);
   }
@@ -885,6 +892,121 @@ app.patch('/api/leave-requests/:reqId/status', requireActiveSession, async (req,
     res.json(updatedReq);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update leave request status: ' + error.message });
+  }
+});
+
+// 11. Request Proof / Supporting Evidence (Supervisors, Managers, Admin)
+app.patch('/api/leave-requests/:reqId/request-proof', requireActiveSession, async (req, res) => {
+  const { reqId } = req.params;
+  const { approverName, approverRole, approverDept, proofRequestNote } = req.body;
+
+  try {
+    const leaveReq = await prisma.leaveRequest.findUnique({
+      where: { id: parseInt(reqId, 10) },
+      include: { employee: true }
+    });
+
+    if (!leaveReq) return res.status(404).json({ error: 'Leave request not found' });
+
+    if (leaveReq.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Proof can only be requested for pending leave requests.' });
+    }
+
+    // Enforce exact same departmental approval hierarchy
+    if (['SUPERVISOR', 'MANAGER'].includes(approverRole)) {
+      if (leaveReq.employee.dept !== approverDept) {
+        return res.status(403).json({ error: 'You can only request proof for leave requests in your own department.' });
+      }
+      if (approverRole === 'SUPERVISOR' && leaveReq.employee.role !== 'EMPLOYEE') {
+        return res.status(403).json({ error: 'Supervisors can only request proof from department Employees.' });
+      }
+      if (approverRole === 'MANAGER' && !['SUPERVISOR', 'EMPLOYEE'].includes(leaveReq.employee.role)) {
+        return res.status(403).json({ error: 'Managers can only request proof from department Supervisors or Employees.' });
+      }
+    } else if (approverRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Only Supervisors, Department Managers, or Admin can request proof.' });
+    }
+
+    const updatedReq = await prisma.leaveRequest.update({
+      where: { id: parseInt(reqId, 10) },
+      data: {
+        proofRequested: true,
+        proofStatus: 'REQUESTED',
+        proofRequestNote: proofRequestNote ? String(proofRequestNote).trim() : null,
+        proofRequestedBy: `${approverName} (${approverRole})`
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            dept: true,
+            remainingAnnual: true,
+            remainingCasual: true,
+            shortLeavesTaken: true
+          }
+        }
+      }
+    });
+
+    res.json(updatedReq);
+  } catch (error) {
+    console.error('Request proof error:', error);
+    res.status(500).json({ error: 'Failed to send proof request: ' + error.message });
+  }
+});
+
+// 12. Upload Proof / Supporting Evidence for an Existing Leave Request (Employee)
+app.patch('/api/leave-requests/:reqId/upload-proof', requireActiveSession, async (req, res) => {
+  const { reqId } = req.params;
+  const { employeeId, attachmentName, attachmentData } = req.body;
+
+  if (!employeeId || !attachmentName || !attachmentData) {
+    return res.status(400).json({ error: 'Employee ID, attachment file name, and attachment data are required.' });
+  }
+
+  try {
+    const leaveReq = await prisma.leaveRequest.findUnique({
+      where: { id: parseInt(reqId, 10) },
+      include: { employee: true }
+    });
+
+    if (!leaveReq) return res.status(404).json({ error: 'Leave request not found' });
+
+    if (leaveReq.employeeId !== employeeId) {
+      return res.status(403).json({ error: 'You are only authorized to upload proof for your own leave requests.' });
+    }
+
+    const updatedReq = await prisma.leaveRequest.update({
+      where: { id: parseInt(reqId, 10) },
+      data: {
+        attachmentName,
+        attachmentData,
+        proofRequested: false,
+        proofStatus: 'SUBMITTED'
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            dept: true,
+            remainingAnnual: true,
+            remainingCasual: true,
+            shortLeavesTaken: true
+          }
+        }
+      }
+    });
+
+    res.json(updatedReq);
+  } catch (error) {
+    console.error('Upload proof error:', error);
+    res.status(500).json({ error: 'Failed to upload supporting proof: ' + error.message });
   }
 });
 
