@@ -664,6 +664,27 @@ app.post('/api/employees/:id/leave-request', requireActiveSession, async (req, r
     let emp = await prisma.employee.findUnique({ where: { id } });
     if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
+    // Validate: Staff can only submit a leave request once per day (Asia/Colombo local day)
+    const todayStr = getTodayString();
+    const recentEmpRequests = await prisma.leaveRequest.findMany({
+      where: { employeeId: emp.id },
+      select: { id: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10
+    });
+
+    const alreadyRequestedToday = recentEmpRequests.some((r) => {
+      if (!r.createdAt) return false;
+      const createdDateStr = new Date(r.createdAt).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+      return createdDateStr === todayStr;
+    });
+
+    if (alreadyRequestedToday) {
+      return res.status(400).json({
+        error: 'Daily limit reached: You have already submitted a leave request today. Staff can only request leave once per day.'
+      });
+    }
+
     emp = await ensureDailyReset(emp);
     const selectedType = String(type).toLowerCase();
     const isShort = selectedType.includes('short');
