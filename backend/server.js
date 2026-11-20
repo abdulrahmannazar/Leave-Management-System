@@ -71,15 +71,35 @@ const getCurrentTimeString = () => {
   });
 };
 
-// Inclusive End Date calculator from YYYY-MM-DD startDate + requested days
+// Inclusive weekday-only End Date calculator (excludes Saturdays & Sundays)
 const calculateEndDate = (startDateStr, days, isShortLeave) => {
   if (!startDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) return startDateStr || getTodayString();
   if (isShortLeave) return startDateStr;
 
   const totalDays = Math.max(1, Math.ceil(days));
   const [year, month, day] = startDateStr.split('-').map(Number);
-  const endObj = new Date(Date.UTC(year, month - 1, day + (totalDays - 1)));
-  return endObj.toISOString().split('T')[0];
+  const current = new Date(Date.UTC(year, month - 1, day));
+
+  while (current.getUTCDay() === 0 || current.getUTCDay() === 6) {
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  let remaining = totalDays - 1;
+  if (remaining >= 5) {
+    const fullWeeks = Math.floor(remaining / 5);
+    current.setUTCDate(current.getUTCDate() + fullWeeks * 7);
+    remaining = remaining % 5;
+  }
+
+  while (remaining > 0) {
+    current.setUTCDate(current.getUTCDate() + 1);
+    const dow = current.getUTCDay();
+    if (dow !== 0 && dow !== 6) {
+      remaining -= 1;
+    }
+  }
+
+  return current.toISOString().split('T')[0];
 };
 
 const roundToOneDecimal = (num) => Math.round(num * 10) / 10;
