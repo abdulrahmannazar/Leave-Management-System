@@ -1,7 +1,9 @@
+try { require('dotenv').config(); } catch (e) {}
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { sendLeaveNotificationEmail } = require('./notification');
 
@@ -9,11 +11,42 @@ const app = express();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'leavecore_super_secret_jwt_key_2026';
 
+// Strict 30-Minute Sliding Idle Timeout & 2-Minute DB Write Throttle
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const DB_WRITE_THROTTLE_MS = 2 * 60 * 1000; // 2 minutes
+const AUTH_COOKIE_NAME = 'leavecore_token';
+
+// In-memory sliding session cache backed by PostgreSQL (Prisma UserSession)
+const activeSessions = new Map();
+
+// Ensure UserSession table exists in PostgreSQL on startup
+const ensureSessionTable = async () => {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "UserSession" (
+        "id" TEXT NOT NULL,
+        "employeeId" TEXT NOT NULL,
+        "lastActiveAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "expiresAt" TIMESTAMP(3) NOT NULL,
+        "revoked" BOOLEAN NOT NULL DEFAULT false,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "UserSession_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "UserSession_employeeId_idx" ON "UserSession"("employeeId");
+    `);
+  } catch (err) {
+    console.warn('Session table initialization notice:', err.message);
+  }
+};
+ensureSessionTable();
+
 // CORS configuration (compatible with Express 5)
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Background-Poll']
 }));
 
 // Increased JSON body limit to support supporting evidence attachments (up to 10MB)
@@ -95,6 +128,224 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Leave Management System API is live and running' });
 });
 
+// ================= SESSION & 30-MIN IDLE TIMEOUT ENGINE =================
+
+const parseCookies = (cookieHeader) => {
+  const list = {};
+  if (!cookieHeader) return list;
+  cookieHeader.split(';').forEach((cookie) => {
+    const parts = cookie.split('=');
+    const key = parts.shift()?.trim();
+    if (key) {
+      list[key] = decodeURIComponent(parts.join('=').trim());
+    }
+  });
+  return list;
+};
+
+const extractToken = (req) => {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token && token !== 'null' && token !== 'undefined') return token;
+  }
+  const cookies = parseCookies(req.headers.cookie);
+  if (cookies[AUTH_COOKIE_NAME]) {
+    return cookies[AUTH_COOKIE_NAME];
+  }
+  return null;
+};
+
+const getSessionKey = (token, decoded) => {
+  if (decoded && decoded.sid) return decoded.sid;
+  return crypto.createHash('sha256').update(token).digest('hex');
+};
+
+const setAuthCookie = (res, token) => {
+  res.cookie(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: IDLE_TIMEOUT_MS,
+    path: '/'
+  });
+};
+
+const clearAuthCookie = (res) => {
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/'
+  });
+};
+
+const createTrackedSession = async (user, res) => {
+  const sessionId = crypto.randomUUID();
+  const now = Date.now();
+  const token = jwt.sign(
+    { id: user.id, email: user.email, role: user.role, dept: user.dept, name: user.name, sid: sessionId },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  const sessionState = {
+    id: sessionId,
+    employeeId: user.id,
+    lastActiveAt: now,
+    lastDbSyncAt: now,
+    revoked: false
+  };
+  activeSessions.set(sessionId, sessionState);
+
+  try {
+    await prisma.userSession.create({
+      data: {
+        id: sessionId,
+        employeeId: user.id,
+        lastActiveAt: new Date(now),
+        expiresAt: new Date(now + IDLE_TIMEOUT_MS),
+        revoked: false
+      }
+    });
+  } catch (err) {
+    console.warn('Could not persist session to DB:', err.message);
+  }
+
+  setAuthCookie(res, token);
+  return { token, sessionId, lastActiveAt: now };
+};
+
+// Middleware: Enforces 30-minute server-side sliding inactivity timeout
+const requireActiveSession = async (req, res, next) => {
+  const token = extractToken(req);
+  if (!token) {
+    clearAuthCookie(res);
+    return res.status(401).json({
+      code: 'UNAUTHORIZED',
+      message: 'Authentication required. Please sign in.',
+      error: 'Authentication required. Please sign in.'
+    });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    clearAuthCookie(res);
+    return res.status(401).json({
+      code: 'SESSION_IDLE_EXPIRED',
+      message: 'Session expired due to 30 minutes of inactivity',
+      error: 'Session expired due to 30 minutes of inactivity'
+    });
+  }
+
+  const now = Date.now();
+  const sessionKey = getSessionKey(token, decoded);
+  let session = activeSessions.get(sessionKey);
+
+  // Hydrate from PostgreSQL if not in memory (e.g., after server restart)
+  if (!session) {
+    try {
+      const dbSession = await prisma.userSession.findUnique({ where: { id: sessionKey } });
+      if (dbSession) {
+        session = {
+          id: dbSession.id,
+          employeeId: dbSession.employeeId,
+          lastActiveAt: new Date(dbSession.lastActiveAt).getTime(),
+          lastDbSyncAt: new Date(dbSession.lastActiveAt).getTime(),
+          revoked: Boolean(dbSession.revoked)
+        };
+        activeSessions.set(sessionKey, session);
+      } else if (!decoded.sid) {
+        // Legacy token without sid: initialize sliding session if still valid
+        session = {
+          id: sessionKey,
+          employeeId: decoded.id,
+          lastActiveAt: now,
+          lastDbSyncAt: now,
+          revoked: false
+        };
+        activeSessions.set(sessionKey, session);
+        prisma.userSession.create({
+          data: {
+            id: sessionKey,
+            employeeId: decoded.id,
+            lastActiveAt: new Date(now),
+            expiresAt: new Date(now + IDLE_TIMEOUT_MS),
+            revoked: false
+          }
+        }).catch(() => {});
+      } else {
+        clearAuthCookie(res);
+        return res.status(401).json({
+          code: 'SESSION_IDLE_EXPIRED',
+          message: 'Session expired due to 30 minutes of inactivity',
+          error: 'Session expired due to 30 minutes of inactivity'
+        });
+      }
+    } catch (err) {
+      session = {
+        id: sessionKey,
+        employeeId: decoded.id,
+        lastActiveAt: now,
+        lastDbSyncAt: now,
+        revoked: false
+      };
+      activeSessions.set(sessionKey, session);
+    }
+  }
+
+  if (session.revoked) {
+    clearAuthCookie(res);
+    return res.status(401).json({
+      code: 'SESSION_IDLE_EXPIRED',
+      message: 'Session expired due to 30 minutes of inactivity',
+      error: 'Session expired due to 30 minutes of inactivity'
+    });
+  }
+
+  const idleDurationMs = now - session.lastActiveAt;
+  if (idleDurationMs > IDLE_TIMEOUT_MS) {
+    session.revoked = true;
+    activeSessions.set(sessionKey, session);
+    prisma.userSession.updateMany({
+      where: { id: sessionKey },
+      data: { revoked: true }
+    }).catch(() => {});
+    clearAuthCookie(res);
+    return res.status(401).json({
+      code: 'SESSION_IDLE_EXPIRED',
+      message: 'Session expired due to 30 minutes of inactivity',
+      error: 'Session expired due to 30 minutes of inactivity'
+    });
+  }
+
+  // Exclude automated background polling from resetting lastActiveAt
+  const isBackgroundPoll =
+    String(req.headers['x-background-poll'] || '').toLowerCase() === 'true' ||
+    String(req.query?.backgroundPoll || '').toLowerCase() === 'true';
+
+  if (!isBackgroundPoll) {
+    session.lastActiveAt = now;
+    setAuthCookie(res, token);
+
+    // Throttle database writes to at most once every 2 minutes
+    if (now - session.lastDbSyncAt >= DB_WRITE_THROTTLE_MS) {
+      session.lastDbSyncAt = now;
+      prisma.userSession.updateMany({
+        where: { id: sessionKey },
+        data: {
+          lastActiveAt: new Date(now),
+          expiresAt: new Date(now + IDLE_TIMEOUT_MS)
+        }
+      }).catch(() => {});
+    }
+  }
+
+  req.user = decoded;
+  req.session = session;
+  next();
+};
+
 // ================= AUTHENTICATION ROUTES =================
 
 // 1. Register a Management User (Employees cannot self-register)
@@ -152,14 +403,10 @@ app.post('/api/auth/register', async (req, res) => {
       }
     });
 
-    const token = jwt.sign(
-      { id: newUser.id, email: newUser.email, role: newUser.role, dept: newUser.dept, name: newUser.name },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const { token, lastActiveAt } = await createTrackedSession(newUser, res);
 
     const { password: _, ...userSafe } = newUser;
-    res.status(201).json({ token, user: userSafe });
+    res.status(201).json({ token, user: userSafe, lastActiveAt, idleTimeoutMs: IDLE_TIMEOUT_MS });
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed: ' + error.message });
@@ -192,24 +439,65 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid password.' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, dept: user.dept, name: user.name },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const { token, lastActiveAt } = await createTrackedSession(user, res);
 
     const { password: _, ...userSafe } = user;
-    res.json({ token, user: userSafe });
+    res.json({ token, user: userSafe, lastActiveAt, idleTimeoutMs: IDLE_TIMEOUT_MS });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login.' });
   }
 });
 
+// 2b. Session Keep-Alive Heartbeat (Protected)
+app.post('/api/auth/heartbeat', requireActiveSession, async (req, res) => {
+  const now = Date.now();
+  if (req.session) {
+    req.session.lastActiveAt = now;
+  }
+  res.json({
+    status: 'ok',
+    lastActiveAt: now,
+    expiresAt: now + IDLE_TIMEOUT_MS
+  });
+});
+
+// 2c. Logout & Session Revocation
+app.post('/api/auth/logout', async (req, res) => {
+  const token = extractToken(req);
+  if (token) {
+    try {
+      const decoded = jwt.decode(token);
+      const sessionKey = getSessionKey(token, decoded);
+      const existing = activeSessions.get(sessionKey);
+      if (existing) {
+        existing.revoked = true;
+        activeSessions.set(sessionKey, existing);
+      } else {
+        activeSessions.set(sessionKey, {
+          id: sessionKey,
+          employeeId: decoded?.id || 'unknown',
+          lastActiveAt: 0,
+          lastDbSyncAt: 0,
+          revoked: true
+        });
+      }
+      await prisma.userSession.updateMany({
+        where: { id: sessionKey },
+        data: { revoked: true }
+      }).catch(() => {});
+    } catch (err) {
+      // Ignore decode error on logout
+    }
+  }
+  clearAuthCookie(res);
+  res.json({ status: 'ok', message: 'Logged out successfully' });
+});
+
 // ================= EMPLOYEE & HIERARCHY ROUTES =================
 
 // 3. Get All Employees
-app.get('/api/employees', async (req, res) => {
+app.get('/api/employees', requireActiveSession, async (req, res) => {
   try {
     let employees = await prisma.employee.findMany({ orderBy: { name: 'asc' } });
     employees = await Promise.all(employees.map(ensureDailyReset));
@@ -221,7 +509,7 @@ app.get('/api/employees', async (req, res) => {
 });
 
 // 4. Add Staff Credentials (By HR, Managers, Supervisors, or Admin)
-app.post('/api/employees', async (req, res) => {
+app.post('/api/employees', requireActiveSession, async (req, res) => {
   const { name, email, password, role, dept, allowedAnnual, allowedCasual, creatorRole, creatorDept } = req.body;
 
   if (!name || !email || !password || !role || !dept) {
@@ -285,7 +573,7 @@ app.post('/api/employees', async (req, res) => {
 });
 
 // 5. HR ONLY: Reduce/Update Remaining Leave Counts
-app.patch('/api/employees/:id/remaining', async (req, res) => {
+app.patch('/api/employees/:id/remaining', requireActiveSession, async (req, res) => {
   const { id } = req.params;
   const { remainingAnnual, remainingCasual, shortLeavesTaken, requesterRole } = req.body;
 
@@ -308,7 +596,7 @@ app.patch('/api/employees/:id/remaining', async (req, res) => {
 });
 
 // 6. HR ONLY: Quick Increment Short Leaves (+1)
-app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
+app.post('/api/employees/:id/increment-short-leave', requireActiveSession, async (req, res) => {
   const { id } = req.params;
   const { requesterRole } = req.body;
 
@@ -333,7 +621,7 @@ app.post('/api/employees/:id/increment-short-leave', async (req, res) => {
 });
 
 // 7. Mark Daily Attendance (Uses actual Asia/Colombo local time)
-app.post('/api/employees/:id/attendance', async (req, res) => {
+app.post('/api/employees/:id/attendance', requireActiveSession, async (req, res) => {
   const { id } = req.params;
   try {
     let emp = await prisma.employee.findUnique({ where: { id } });
@@ -359,7 +647,7 @@ app.post('/api/employees/:id/attendance', async (req, res) => {
 // ================= LEAVE REQUEST & APPROVAL ROUTES =================
 
 // 8. Submit Leave Request (Creates PENDING request with Dates + Supporting Evidence & notifies HR)
-app.post('/api/employees/:id/leave-request', async (req, res) => {
+app.post('/api/employees/:id/leave-request', requireActiveSession, async (req, res) => {
   const { id } = req.params;
   const { type, days, startDate, endDate, reason, attachmentName, attachmentData } = req.body;
   const requestedAmount = roundToOneDecimal(parseFloat(days));
@@ -465,7 +753,7 @@ app.post('/api/employees/:id/leave-request', async (req, res) => {
 });
 
 // 9. Get All Leave Requests (with Employee details)
-app.get('/api/leave-requests', async (req, res) => {
+app.get('/api/leave-requests', requireActiveSession, async (req, res) => {
   try {
     const requests = await prisma.leaveRequest.findMany({
       include: {
@@ -491,7 +779,7 @@ app.get('/api/leave-requests', async (req, res) => {
 });
 
 // 10. Approve or Reject Leave Request (Supervisors, Managers, Admin) & Notify HR
-app.patch('/api/leave-requests/:reqId/status', async (req, res) => {
+app.patch('/api/leave-requests/:reqId/status', requireActiveSession, async (req, res) => {
   const { reqId } = req.params;
   const { status, approverName, approverRole, approverDept } = req.body; // 'APPROVED' | 'REJECTED'
 

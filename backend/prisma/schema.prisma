@@ -42,3 +42,14 @@ model LeaveRequest {
   exceededBy     Float    @default(0)
   createdAt      DateTime @default(now())
 }
+
+model UserSession {
+  id           String   @id
+  employeeId   String
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+  revoked      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([employeeId])
+}
