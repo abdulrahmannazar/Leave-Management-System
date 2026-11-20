@@ -73,6 +73,19 @@ export default function EmployeePortal({
 
   const myLeaveRequests = leaveRequests.filter((req) => req.employeeId === currentEmp.id);
 
+  // Check if the staff member has already submitted a leave request today (Asia/Colombo local day)
+  const todayLocalStr = getLocalToday();
+  const todaysSubmittedRequest = useMemo(() => {
+    return myLeaveRequests.find((req) => {
+      if (!req.createdAt) return false;
+      const reqCreatedLocal = new Date(req.createdAt).toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Colombo'
+      });
+      return reqCreatedLocal === todayLocalStr;
+    });
+  }, [myLeaveRequests, todayLocalStr]);
+  const hasRequestedToday = Boolean(todaysSubmittedRequest);
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -133,6 +146,15 @@ export default function EmployeePortal({
 
   const handleLeaveSubmit = async (e) => {
     e.preventDefault();
+
+    if (hasRequestedToday) {
+      return onShowDialog({
+        type: 'error',
+        title: 'Daily Request Limit Reached',
+        message: 'Daily limit reached: You have already submitted a leave request today. Staff can only request leave once per day.'
+      });
+    }
+
     const reqDays = parseFloat(days);
     if (!reqDays || reqDays <= 0) {
       return onShowDialog({
@@ -264,10 +286,34 @@ export default function EmployeePortal({
 
       {/* Apply for Leave Form */}
       <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-1">Apply for Leave</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          Your request will be sent to your Department Supervisor/Manager for approval and notified to HR.
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-0.5">Apply for Leave</h3>
+            <p className="text-xs text-slate-500">
+              Your request will be sent to your Department Supervisor/Manager for approval and notified to HR.
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 self-start sm:self-center ${
+              hasRequestedToday
+                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                : 'bg-sky-50 text-[#1178a4] border border-sky-200'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            <span>{hasRequestedToday ? '1 / 1 Daily Request Used' : 'Limit: 1 Request / Day'}</span>
+          </span>
+        </div>
+
+        {hasRequestedToday && (
+          <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Daily Leave Request Limit Reached:</span> You have already submitted a leave request today ({todaysSubmittedRequest.leaveType} for {todaysSubmittedRequest.startDate || todayLocalStr}). Staff members can only request leave once per day.
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleLeaveSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -399,10 +445,14 @@ export default function EmployeePortal({
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-2.5 bg-[#1178a4] hover:bg-[#0e6388] text-white font-semibold rounded-lg text-sm transition shadow-sm disabled:opacity-50"
+            disabled={loading || hasRequestedToday}
+            className="w-full py-2.5 bg-[#1178a4] hover:bg-[#0e6388] text-white font-semibold rounded-lg text-sm transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Submitting...' : 'Submit Leave Request'}
+            {loading
+              ? 'Submitting...'
+              : hasRequestedToday
+              ? 'Daily Leave Request Limit Reached (1 Per Day)'
+              : 'Submit Leave Request'}
           </button>
         </form>
       </div>
