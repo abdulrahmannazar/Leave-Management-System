@@ -1,6 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Users, UserCheck, ClipboardCheck, LogOut } from 'lucide-react';
-import { fetchEmployees, fetchLeaveRequests } from './api';
+import {
+  fetchEmployees,
+  fetchLeaveRequests,
+  logoutUserSession,
+  clearLocalAuthState,
+  IDLE_LOGOUT_MESSAGE
+} from './api';
+import useIdleTimeout from './hooks/useIdleTimeout';
 import LoginPage from './components/LoginPage';
 import HRDashboard from './components/HRDashboard';
 import LeaveApprovals from './components/LeaveApprovals';
@@ -8,11 +15,16 @@ import EmployeePortal from './components/EmployeePortal';
 import AddEmployeeModal from './components/AddEmployeeModal';
 import BreachModal from './components/BreachModal';
 import DialogModal from './components/DialogModal';
+import IdleWarningModal from './components/IdleWarningModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('leavecore_user');
     return saved ? JSON.parse(saved) : null;
+  });
+
+  const [logoutNotice, setLogoutNotice] = useState(() => {
+    return sessionStorage.getItem('leavecore_logout_notice') || '';
   });
 
   const [view, setView] = useState('portal'); // 'records' | 'approvals' | 'portal'
@@ -21,6 +33,39 @@ export default function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [breachData, setBreachData] = useState(null);
   const [dialogData, setDialogData] = useState(null);
+
+  const handleSessionEnded = useCallback((reasonMessage = null) => {
+    setIsAddModalOpen(false);
+    setBreachData(null);
+    setDialogData(null);
+    setEmployees([]);
+    setLeaveRequests([]);
+    setCurrentUser(null);
+    if (reasonMessage) {
+      setLogoutNotice(reasonMessage);
+      sessionStorage.setItem('leavecore_logout_notice', reasonMessage);
+    }
+  }, []);
+
+  const {
+    isWarningOpen,
+    remainingSeconds,
+    handleStaySignedIn,
+    handleLogoutNow
+  } = useIdleTimeout({
+    isAuthenticated: Boolean(currentUser),
+    onIdleLogout: handleSessionEnded
+  });
+
+  // Global 401 Unauthorized Interceptor listener
+  useEffect(() => {
+    const onUnauthorized = (e) => {
+      const msg = e.detail?.message || IDLE_LOGOUT_MESSAGE;
+      handleSessionEnded(msg);
+    };
+    window.addEventListener('leavecore:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('leavecore:unauthorized', onUnauthorized);
+  }, [handleSessionEnded]);
 
   const loadData = async () => {
     try {
@@ -46,14 +91,33 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('leavecore_token');
-    localStorage.removeItem('leavecore_user');
-    setCurrentUser(null);
+  const handleLogout = async () => {
+    await logoutUserSession();
+    clearLocalAuthState(null);
+    sessionStorage.removeItem('leavecore_logout_notice');
+    setLogoutNotice('');
+    localStorage.setItem(
+      'leavecore_logout_broadcast',
+      JSON.stringify({ timestamp: Date.now(), reason: null })
+    );
+    handleSessionEnded(null);
   };
 
   if (!currentUser) {
-    return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
+    return (
+      <LoginPage
+        logoutNotice={logoutNotice}
+        onClearNotice={() => {
+          setLogoutNotice('');
+          sessionStorage.removeItem('leavecore_logout_notice');
+        }}
+        onLoginSuccess={(user) => {
+          setLogoutNotice('');
+          sessionStorage.removeItem('leavecore_logout_notice');
+          setCurrentUser(user);
+        }}
+      />
+    );
   }
 
   const isManagement = ['ADMIN', 'HR', 'MANAGER', 'SUPERVISOR'].includes(currentUser.role);
@@ -191,6 +255,13 @@ export default function App() {
           onClose={() => setDialogData(null)}
         />
       )}
+
+      <IdleWarningModal
+        isOpen={isWarningOpen}
+        remainingSeconds={remainingSeconds}
+        onStaySignedIn={handleStaySignedIn}
+        onLogoutNow={handleLogoutNow}
+      />
     </div>
   );
 }

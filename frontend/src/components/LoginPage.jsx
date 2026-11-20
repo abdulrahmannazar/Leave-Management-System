@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ArrowRight, Clock } from 'lucide-react';
 import { loginUser } from '../api';
 
-export default function LoginPage({ onLoginSuccess }) {
+export default function LoginPage({ onLoginSuccess, logoutNotice, onClearNotice }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -14,6 +14,8 @@ export default function LoginPage({ onLoginSuccess }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    if (onClearNotice) onClearNotice();
+    sessionStorage.removeItem('leavecore_logout_notice');
     setLoading(true);
     try {
       const res = await loginUser({ identifier, password });
@@ -22,6 +24,7 @@ export default function LoginPage({ onLoginSuccess }) {
       } else {
         localStorage.setItem('leavecore_token', res.token);
         localStorage.setItem('leavecore_user', JSON.stringify(res.user));
+        localStorage.setItem('leavecore_last_activity', String(Date.now()));
         onLoginSuccess(res.user);
       }
     } catch (err) {
@@ -56,6 +59,13 @@ export default function LoginPage({ onLoginSuccess }) {
               Sign In to Your Account
             </h3>
           </div>
+
+          {logoutNotice && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{logoutNotice}</span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-semibold text-red-600">
