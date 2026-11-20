@@ -168,3 +168,19 @@ export const updateLeaveRequestStatus = async (reqId, payload) => {
     body: JSON.stringify(payload)
   });
 };
+
+export const requestLeaveProof = async (reqId, payload) => {
+  return authFetch(`${API_BASE}/leave-requests/${reqId}/request-proof`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+};
+
+export const uploadLeaveProof = async (reqId, payload) => {
+  return authFetch(`${API_BASE}/leave-requests/${reqId}/upload-proof`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+};
