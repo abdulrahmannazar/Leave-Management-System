@@ -19,7 +19,7 @@ const getLocalToday = () => {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
 };
 
-// Inclusive End Date calculator from YYYY-MM-DD startDate + requested days
+// Inclusive weekday-only End Date calculator (excludes Saturdays & Sundays)
 const computeEndDate = (startDateStr, daysValue, leaveCategory) => {
   if (!startDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) return '';
   if (leaveCategory === 'short') return startDateStr;
@@ -29,8 +29,29 @@ const computeEndDate = (startDateStr, daysValue, leaveCategory) => {
 
   const totalDays = Math.max(1, Math.ceil(parsed));
   const [year, month, day] = startDateStr.split('-').map(Number);
-  const endObj = new Date(Date.UTC(year, month - 1, day + (totalDays - 1)));
-  return endObj.toISOString().split('T')[0];
+  const current = new Date(Date.UTC(year, month - 1, day));
+
+  // If start date falls on a weekend, start counting from the next Monday
+  while (current.getUTCDay() === 0 || current.getUTCDay() === 6) {
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  let remaining = totalDays - 1;
+  if (remaining >= 5) {
+    const fullWeeks = Math.floor(remaining / 5);
+    current.setUTCDate(current.getUTCDate() + fullWeeks * 7);
+    remaining = remaining % 5;
+  }
+
+  while (remaining > 0) {
+    current.setUTCDate(current.getUTCDate() + 1);
+    const dow = current.getUTCDay();
+    if (dow !== 0 && dow !== 6) {
+      remaining -= 1;
+    }
+  }
+
+  return current.toISOString().split('T')[0];
 };
 
 // Opens a Base64 Data URL reliably in a new browser tab via Blob URL
@@ -360,7 +381,7 @@ export default function EmployeePortal({
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                End Date <span className="text-[10px] font-medium text-[#1178a4] normal-case">(Auto-calculated)</span>
+                End Date <span className="text-[10px] font-medium text-[#1178a4] normal-case">(Auto-calculated &bull; Weekdays only)</span>
               </label>
               <input
                 type="date"
