@@ -146,61 +146,57 @@ export default function App() {
 
           {/* Right Controls & Navigation */}
           <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-4 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div className="flex flex-1 md:flex-initial gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto">
-              <button
-                onClick={() => setView('dashboard')}
-                className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                  view === 'dashboard'
-                    ? 'bg-white text-[#1178a4] shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
-                <span>Dashboard</span>
-              </button>
-
-              {isManagement && (
-                <>
-                  <button
-                    onClick={() => setView('records')}
-                    className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                      view === 'records'
-                        ? 'bg-white text-[#1178a4] shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Users className="w-3.5 h-3.5 shrink-0" />
-                    <span>Staff Records</span>
-                  </button>
-                  <button
-                    onClick={() => setView('approvals')}
-                    className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                      view === 'approvals'
-                        ? 'bg-white text-[#1178a4] shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
-                    <span>Leave Approvals</span>
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={() => setView('portal')}
-                className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                  view === 'portal'
-                    ? 'bg-white text-[#1178a4] shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                <span>My Portal</span>
-              </button>
-            </div>
+            {isManagement && (
+              <div className="flex flex-1 md:flex-initial gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto">
+                <button
+                  onClick={() => setView('dashboard')}
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'dashboard'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Dashboard</span>
+                </button>
+                <button
+                  onClick={() => setView('records')}
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'records'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span>Staff Records</span>
+                </button>
+                <button
+                  onClick={() => setView('approvals')}
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'approvals'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Leave Approvals</span>
+                </button>
+                <button
+                  onClick={() => setView('portal')}
+                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                    view === 'portal'
+                      ? 'bg-white text-[#1178a4] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>My Portal</span>
+                </button>
+              </div>
+            )}
 
             {/* User Profile & Logout */}
-            <div className="flex items-center gap-2 sm:gap-3 border-l pl-2 sm:pl-4 border-slate-200">
+            <div className={`flex items-center gap-2 sm:gap-3 ${isManagement ? 'border-l pl-2 sm:pl-4 border-slate-200' : 'ml-auto'}`}>
               <div className="text-right">
                 <div className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[110px] sm:max-w-none">
                   {currentUser.name}
@@ -223,12 +219,12 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-3 sm:px-4 mt-5 sm:mt-8">
-        {view === 'dashboard' ? (
+        {view === 'dashboard' && isManagement ? (
           <OverviewDashboard
             currentUser={currentUser}
             employees={employees}
             leaveRequests={leaveRequests}
-            onNavigate={isManagement ? setView : undefined}
+            onNavigate={setView}
           />
         ) : view === 'records' && isManagement ? (
           <HRDashboard

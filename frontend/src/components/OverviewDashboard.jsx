@@ -91,10 +91,14 @@ export default function OverviewDashboard({
   const [showAllApprovedLeaves, setShowAllApprovedLeaves] = useState(false);
 
   const isAdminOrHR = ['ADMIN', 'HR'].includes(currentUser.role);
+  const canViewDashboard = ['ADMIN', 'HR', 'MANAGER', 'SUPERVISOR'].includes(currentUser.role);
   const todayStr = getLocalToday();
 
   // Filter visible employees based on user role & department filter
+  // Admin & HR: full company-wide access (with department filter)
+  // Manager / Supervisor: strictly their own department's employees only
   const visibleEmployees = useMemo(() => {
+    if (!canViewDashboard) return [];
     return employees.filter((emp) => {
       if (isAdminOrHR) {
         if (selectedDeptFilter !== 'ALL' && emp.dept !== selectedDeptFilter) return false;
@@ -112,28 +116,41 @@ export default function OverviewDashboard({
           ['SUPERVISOR', 'EMPLOYEE'].includes(emp.role)
         );
       }
-      return emp.dept === currentUser.dept;
+      return false;
     });
-  }, [employees, currentUser, isAdminOrHR, selectedDeptFilter]);
+  }, [employees, currentUser, isAdminOrHR, canViewDashboard, selectedDeptFilter]);
 
   const visibleEmployeeIds = useMemo(
     () => new Set(visibleEmployees.map((e) => e.id)),
     [visibleEmployees]
   );
 
-  // Filter leave requests for visible employees
+  // Filter leave requests strictly for visible employees
   const visibleLeaveRequests = useMemo(() => {
+    if (!canViewDashboard) return [];
     return leaveRequests.filter((req) => {
-      if (visibleEmployeeIds.has(req.employeeId)) return true;
       if (isAdminOrHR) {
-        if (selectedDeptFilter !== 'ALL' && req.employee?.dept !== selectedDeptFilter) {
-          return false;
+        if (selectedDeptFilter !== 'ALL') {
+          return req.employee?.dept === selectedDeptFilter || visibleEmployeeIds.has(req.employeeId);
         }
         return true;
       }
-      return req.employee?.dept === currentUser.dept;
+      if (visibleEmployeeIds.has(req.employeeId)) return true;
+      if (currentUser.role === 'MANAGER') {
+        return (
+          req.employee?.dept === currentUser.dept &&
+          ['MANAGER', 'SUPERVISOR', 'EMPLOYEE'].includes(req.employee?.role)
+        );
+      }
+      if (currentUser.role === 'SUPERVISOR') {
+        return (
+          req.employee?.dept === currentUser.dept &&
+          ['SUPERVISOR', 'EMPLOYEE'].includes(req.employee?.role)
+        );
+      }
+      return false;
     });
-  }, [leaveRequests, visibleEmployeeIds, isAdminOrHR, selectedDeptFilter, currentUser.dept]);
+  }, [leaveRequests, visibleEmployeeIds, isAdminOrHR, canViewDashboard, selectedDeptFilter, currentUser]);
 
   // 1. Approved leaves active today ("On Leave" today)
   const onLeaveTodayRequests = useMemo(() => {
@@ -196,6 +213,8 @@ export default function OverviewDashboard({
   const toggleInsightDrawer = (key) => {
     setActiveFilterTab((prev) => (prev === key ? null : key));
   };
+
+  if (!canViewDashboard) return null;
 
   return (
     <div className="space-y-5 sm:space-y-6">
